@@ -1,21 +1,21 @@
 const axios = require('axios');
 const User = require('../models/User');
 
-// Endpoint RPC da Monad Testnet
+// Monad Testnet RPC Endpoint
 const MONAD_RPC_URL = process.env.MONAD_RPC_URL || 'https://testnet-rpc.monad.xyz/';
 
-// ABI para função balanceOf do ERC-1155 (simplificado para uso com JSON-RPC)
-const ERC1155_BALANCE_OF_ABI_HASH = '0x00fdd58e'; // Assinatura da função balanceOf(address,uint256)
+// ABI for ERC-1155 balanceOf function (simplified for use with JSON-RPC)
+const ERC1155_BALANCE_OF_ABI_HASH = '0x00fdd58e'; // balanceOf(address,uint256) function signature
 
-// Cache para armazenar resultados de verificações recentes
+// Cache to store results of recent checks
 const nftCache = {
     data: {},
-    timeout: 60 * 60 * 1000, // 1 hora em ms
+    timeout: 60 * 60 * 1000, // 1 hour in ms
     get: function (key) {
         const entry = this.data[key];
         if (!entry) return null;
 
-        // Verifica se o cache expirou
+        // Check if cache has expired
         if (Date.now() - entry.timestamp > this.timeout) {
             delete this.data[key];
             return null;
@@ -32,23 +32,23 @@ const nftCache = {
 };
 
 /**
- * Verifica os NFTs de todos os usuários ou de um usuário específico
- * @param {string} [userId] - ID opcional do usuário específico para verificar
- * @returns {Promise<Object>} - Resultado da verificação
+ * Check NFTs for all users or a specific user
+ * @param {string} [userId] - Optional user ID to check
+ * @returns {Promise<Object>} - Check result
  */
 async function checkAllUsersNfts(userId = null) {
     try {
-        console.log(`Iniciando verificação de NFTs ${userId ? 'para o usuário ' + userId : 'para todos os usuários'}`);
+        console.log(`Starting NFT verification ${userId ? 'for user ' + userId : 'for all users'}`);
 
-        // Filtro para encontrar usuários com carteira registrada
+        // Filter to find users with registered wallets
         const filter = { walletAddress: { $exists: true, $ne: "" } };
         if (userId) {
             filter.userId = userId;
         }
 
-        // Buscar usuários com carteiras registradas
+        // Find users with registered wallets
         const users = await User.find(filter);
-        console.log(`Encontrados ${users.length} usuários com carteiras registradas`);
+        console.log(`Found ${users.length} users with registered wallets`);
 
         const results = {
             success: 0,
@@ -57,10 +57,10 @@ async function checkAllUsersNfts(userId = null) {
             details: []
         };
 
-        // Verificar NFTs para cada usuário
+        // Check NFTs for each user
         for (const user of users) {
             try {
-                console.log(`Verificando NFTs para ${user.username} (${user.walletAddress})`);
+                console.log(`Checking NFTs for ${user.username} (${user.walletAddress})`);
                 await checkUserNfts(user);
                 results.success++;
                 results.details.push({
@@ -73,7 +73,7 @@ async function checkAllUsersNfts(userId = null) {
                     }
                 });
             } catch (error) {
-                console.error(`Erro ao verificar NFTs para ${user.username}:`, error.message);
+                console.error(`Error checking NFTs for ${user.username}:`, error.message);
                 results.failed++;
                 results.details.push({
                     userId: user.userId,
@@ -84,86 +84,86 @@ async function checkAllUsersNfts(userId = null) {
             }
         }
 
-        console.log(`Verificação de NFTs concluída. Sucesso: ${results.success}, Falhas: ${results.failed}, Atualizações: ${results.updated}`);
+        console.log(`NFT verification completed. Success: ${results.success}, Failed: ${results.failed}, Updated: ${results.updated}`);
         return results;
     } catch (error) {
-        console.error('Erro ao verificar NFTs:', error);
+        console.error('Error checking NFTs:', error);
         throw error;
     }
 }
 
 /**
- * Verifica os NFTs de um usuário específico
- * @param {Object} user - Usuário do MongoDB a ser verificado
+ * Check NFTs for a specific user
+ * @param {Object} user - MongoDB user to check
  */
 async function checkUserNfts(user) {
     try {
-        // Verificar NFTs para cada coleção
+        // Check NFTs for each collection
         const collection1Count = await getNftsForCollection(user.walletAddress, process.env.NFT_COLLECTION1_ADDRESS, 0);
         const collection2Count = await getNftsForCollection(user.walletAddress, process.env.NFT_COLLECTION2_ADDRESS, 0);
 
-        console.log(`NFTs encontrados para ${user.username}: Coleção 1: ${collection1Count}, Coleção 2: ${collection2Count}`);
+        console.log(`NFTs found for ${user.username}: Collection 1: ${collection1Count}, Collection 2: ${collection2Count}`);
 
-        // Verificar se há alterações
+        // Check if there are changes
         const changed =
             user.nfts.collection1Count !== collection1Count ||
             user.nfts.collection2Count !== collection2Count;
 
         if (changed) {
-            // Atualizar contagens de NFT
+            // Update NFT counts
             user.nfts.collection1Count = collection1Count;
             user.nfts.collection2Count = collection2Count;
             await user.save();
-            console.log(`NFTs atualizados para ${user.username}`);
+            console.log(`NFTs updated for ${user.username}`);
             return true;
         }
 
         return false;
     } catch (error) {
-        console.error(`Erro ao verificar NFTs para o usuário ${user.username}:`, error);
+        console.error(`Error checking NFTs for user ${user.username}:`, error);
         throw error;
     }
 }
 
 /**
- * Obtém a contagem de NFTs ERC-1155 para uma determinada carteira e coleção
- * @param {string} address - Endereço da carteira
- * @param {string} contractAddress - Endereço do contrato NFT
- * @param {number} tokenId - ID do token a verificar
- * @returns {Promise<number>} - Contagem de NFTs
+ * Get ERC-1155 NFT count for a given wallet and collection
+ * @param {string} address - Wallet address
+ * @param {string} contractAddress - NFT contract address
+ * @param {number} tokenId - Token ID to check
+ * @returns {Promise<number>} - NFT count
  */
 async function getNftsForCollection(address, contractAddress, tokenId = 0) {
     try {
-        // Garantir que o endereço está no formato correto
+        // Ensure address is in the correct format
         address = address.toLowerCase();
         if (!address.startsWith('0x')) {
             address = '0x' + address;
         }
 
-        // Usar cache para evitar chamadas repetidas
+        // Use cache to avoid repeated calls
         const cacheKey = `${address}-${contractAddress}-${tokenId}`;
         const cachedResult = nftCache.get(cacheKey);
 
         if (cachedResult !== null) {
-            console.log(`Usando resultado em cache para ${address} na coleção ${contractAddress}`);
+            console.log(`Using cached result for ${address} in collection ${contractAddress}`);
             return cachedResult;
         }
 
-        // Ajusta o formato do endereço para a chamada (remove 0x e preenche para 64 caracteres)
+        // Adjust address format for the call (remove 0x and pad to 64 characters)
         const formattedAddress = address.startsWith('0x')
             ? address.slice(2).toLowerCase().padStart(64, '0')
             : address.toLowerCase().padStart(64, '0');
 
-        // Formata o tokenId para hexadecimal e preenche para 64 caracteres
+        // Format tokenId to hexadecimal and pad to 64 characters
         const tokenIdHex = tokenId.toString(16).padStart(64, '0');
 
-        // Cria os dados para a chamada ERC-1155 balanceOf(address,uint256)
-        // Formato: hash da função + endereço do wallet + tokenId
+        // Create data for ERC-1155 balanceOf(address,uint256) call
+        // Format: function hash + wallet address + tokenId
         const balanceOfData = `${ERC1155_BALANCE_OF_ABI_HASH}${formattedAddress}${tokenIdHex}`;
 
-        console.log(`Verificando NFT ERC-1155 para ${address} no contrato ${contractAddress}, tokenId ${tokenId}`);
+        console.log(`Checking ERC-1155 NFT for ${address} in contract ${contractAddress}, tokenId ${tokenId}`);
 
-        // Tenta chamar a API com retry e backoff exponencial
+        // Try to call the API with retry and exponential backoff
         const nftCount = await callWithRetry(async () => {
             const response = await axios.post(MONAD_RPC_URL, {
                 jsonrpc: '2.0',
@@ -178,42 +178,42 @@ async function getNftsForCollection(address, contractAddress, tokenId = 0) {
                 ]
             });
 
-            // Verifica se a resposta contém o resultado
+            // Check if the response contains the result
             if (response.data && response.data.result) {
-                // Converte o resultado (hex) para um número
+                // Convert result (hex) to a number
                 const count = parseInt(response.data.result, 16);
-                console.log(`Usuário possui ${count} NFTs na coleção ${contractAddress}, tokenId ${tokenId}`);
+                console.log(`User has ${count} NFTs in collection ${contractAddress}, tokenId ${tokenId}`);
                 return count;
             } else if (response.data && response.data.error) {
-                console.log(`Método 1 falhou: ${JSON.stringify(response.data.error)}`);
+                console.log(`Method 1 failed: ${JSON.stringify(response.data.error)}`);
                 throw new Error(`ERC-1155 check failed: ${JSON.stringify(response.data.error)}`);
             } else {
-                console.warn(`Resposta inesperada: ${JSON.stringify(response.data)}`);
+                console.warn(`Unexpected response: ${JSON.stringify(response.data)}`);
                 throw new Error('Unexpected response');
             }
-        }, 3);  // Máximo de 3 tentativas
+        }, 3);  // Maximum of 3 attempts
 
-        // Armazena resultado no cache
+        // Store result in cache
         nftCache.set(cacheKey, nftCount);
         return nftCount;
     } catch (error) {
-        console.error(`Erro ao verificar NFTs (ERC-1155) para ${address}:`, error.message);
-        console.log(`Tentando consulta alternativa de NFTs para ${address}`);
+        console.error(`Error checking NFTs (ERC-1155) for ${address}:`, error.message);
+        console.log(`Trying alternative NFT query for ${address}`);
 
-        // Fallback para ERC-721
+        // Fallback for ERC-721
         try {
             const nftCount = await getERC721NftsForCollection(address, contractAddress);
-            // Armazena resultado no cache mesmo sendo fallback
+            // Store result in cache even if it's a fallback
             nftCache.set(`${address}-${contractAddress}-${tokenId}`, nftCount);
             return nftCount;
         } catch (fallbackError) {
-            console.error('Fallback também falhou:', fallbackError.message);
+            console.error('Fallback also failed:', fallbackError.message);
 
-            // Em ambiente de produção, retornar 0
-            // Em ambiente de desenvolvimento ou teste, podemos simular NFTs
+            // In production environment, return 0
+            // In development or test environment, we can simulate NFTs
             if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
-                console.log('Simulando consulta ao explorador Monad para', address);
-                console.warn('AVISO: Assumindo que o usuário possui NFTs para fins de teste');
+                console.log('Simulating query to Monad explorer for', address);
+                console.warn('WARNING: Assuming user has NFTs for test purposes');
                 return 0;
             }
 
@@ -223,39 +223,39 @@ async function getNftsForCollection(address, contractAddress, tokenId = 0) {
 }
 
 /**
- * Fallback: Obtém a contagem de NFTs ERC-721 para uma determinada carteira e coleção
- * @param {string} address - Endereço da carteira
- * @param {string} contractAddress - Endereço do contrato NFT
- * @returns {Promise<number>} - Contagem de NFTs
+ * Fallback: Get ERC-721 NFT count for a given wallet and collection
+ * @param {string} address - Wallet address
+ * @param {string} contractAddress - NFT contract address
+ * @returns {Promise<number>} - NFT count
  */
 async function getERC721NftsForCollection(address, contractAddress) {
     try {
-        // Garantir que o endereço está no formato correto
+        // Ensure address is in the correct format
         address = address.toLowerCase();
         if (!address.startsWith('0x')) {
             address = '0x' + address;
         }
 
-        // Verificar cache primeiro
+        // Check cache first
         const cacheKey = `erc721-${address}-${contractAddress}`;
         const cachedResult = nftCache.get(cacheKey);
 
         if (cachedResult !== null) {
-            console.log(`Usando resultado em cache para ERC721 ${address} na coleção ${contractAddress}`);
+            console.log(`Using cached result for ERC721 ${address} in collection ${contractAddress}`);
             return cachedResult;
         }
 
-        // Ajusta o formato do endereço para a chamada (remove 0x e preenche para 64 caracteres)
+        // Adjust address format for the call (remove 0x and pad to 64 characters)
         const formattedAddress = address.startsWith('0x')
             ? address.slice(2).toLowerCase().padStart(64, '0')
             : address.toLowerCase().padStart(64, '0');
 
-        // Cria os dados para a chamada ERC-721 balanceOf(address)
+        // Create data for ERC-721 balanceOf(address) call
         const balanceOfData = `0x70a08231000000000000000000000000${formattedAddress}`;
 
-        console.log(`Chamando método balanceOf (padrão) em ${contractAddress}`);
+        console.log(`Calling balanceOf (default) method in ${contractAddress}`);
 
-        // Usar retry para chamadas ERC-721 também
+        // Use retry for ERC-721 calls as well
         const nftCount = await callWithRetry(async () => {
             const response = await axios.post(MONAD_RPC_URL, {
                 jsonrpc: '2.0',
@@ -272,97 +272,97 @@ async function getERC721NftsForCollection(address, contractAddress) {
 
             if (response.data && response.data.result) {
                 const count = parseInt(response.data.result, 16);
-                console.log(`Usuário possui ${count} NFTs ERC-721 na coleção ${contractAddress}`);
+                console.log(`User has ${count} NFTs ERC-721 in collection ${contractAddress}`);
                 return count;
             } else {
-                console.warn(`Método ERC-721 falhou: ${JSON.stringify(response.data)}`);
+                console.warn(`ERC-721 method failed: ${JSON.stringify(response.data)}`);
                 throw new Error(`ERC-721 check failed: ${JSON.stringify(response.data)}`);
             }
-        }, 3);  // Máximo de 3 tentativas
+        }, 3);  // Maximum of 3 attempts
 
-        // Armazenar resultado no cache
+        // Store result in cache
         nftCache.set(cacheKey, nftCount);
         return nftCount;
     } catch (error) {
-        console.error(`Erro ao verificar NFTs ERC-721 para ${address}:`, error.message);
+        console.error(`Error checking NFTs ERC-721 for ${address}:`, error.message);
         return 0;
     }
 }
 
 /**
- * Função utilitária para tentar uma operação várias vezes com backoff exponencial
- * @param {Function} operation - Função a ser executada
- * @param {number} maxRetries - Número máximo de tentativas
- * @returns {Promise<any>} - Resultado da operação
+ * Utility function to attempt an operation multiple times with exponential backoff
+ * @param {Function} operation - Function to execute
+ * @param {number} maxRetries - Maximum number of attempts
+ * @returns {Promise<any>} - Operation result
  */
 async function callWithRetry(operation, maxRetries = 3) {
     let lastError;
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             return await operation();
         } catch (error) {
             lastError = error;
 
-            // Se for o erro 429 (rate limit), ou erro de conexão, tentar novamente
+            // If it's a 429 (rate limit) or connection error, try again
             if (error.response?.status === 429 || error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
-                const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000; // Backoff exponencial com jitter
-                console.log(`Tentativa ${attempt} falhou com erro: ${error.message}. Tentando novamente em ${Math.round(delay / 1000)} segundos...`);
+                const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000; // Exponential backoff with jitter
+                console.log(`Attempt ${attempt} failed with error: ${error.message}. Retrying in ${Math.round(delay / 1000)} seconds...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
             } else {
-                // Para outros tipos de erro, não tentar novamente
+                // For other types of errors, don't retry
                 throw error;
             }
         }
     }
 
-    // Se todas as tentativas falharem, lançar o último erro
+    // If all attempts fail, throw the last error
     throw lastError || new Error('Operation failed after retries');
 }
 
 /**
- * Verifica se uma transação específica foi realizada
- * @param {string} fromAddress - Endereço da carteira de origem
- * @param {string} toAddress - Endereço da carteira de destino
- * @param {number} exactAmount - Valor exato da transação em ETH/MONAD
- * @returns {Promise<{success: boolean, txHash: string|null}>} - Resultado da verificação
+ * Check if a specific transaction was performed
+ * @param {string} fromAddress - Source wallet address
+ * @param {string} toAddress - Destination wallet address
+ * @param {number} exactAmount - Exact transaction value in ETH/MONAD
+ * @returns {Promise<{success: boolean, txHash: string|null}>} - Check result
  */
 async function checkTransactionVerification(fromAddress, toAddress, exactAmount) {
     try {
-        console.log(`Verificando transação de ${fromAddress} para ${toAddress} no valor exato de ${exactAmount} MONAD`);
+        console.log(`Checking transaction from ${fromAddress} to ${toAddress} with exact amount of ${exactAmount} MONAD`);
 
-        // Normalizar endereços
+        // Normalize addresses
         fromAddress = fromAddress.toLowerCase();
         toAddress = toAddress.toLowerCase();
 
-        // Buscar o bloco mais recente
+        // Get latest block
         const response = await axios.post(MONAD_RPC_URL, {
             jsonrpc: '2.0',
             id: 1,
-            method: 'eth_blockNumber',
-            params: []
+            method: 'eth_blockNumber'
         });
 
         if (!response.data || !response.data.result) {
-            console.error('Erro ao obter o número do bloco mais recente:', response.data);
+            console.error('Error getting latest block number:', response.data);
             return { success: false, txHash: null };
         }
 
         const latestBlock = parseInt(response.data.result, 16);
-        const fromBlock = Math.max(0, latestBlock - 100); // Verificar os últimos 100 blocos
+        const fromBlock = Math.max(0, latestBlock - 100); // Check last 100 blocks
 
-        console.log(`Verificando transações dos blocos ${fromBlock} até ${latestBlock}`);
+        console.log(`Checking transactions from blocks ${fromBlock} to ${latestBlock}`);
 
-        // Em produção, você usaria uma API mais robusta como o Monad Explorer ou
-        // um serviço de indexação para buscar todas as transações para o endereço de destino
-        // Aqui usamos uma simulação para testes
+        // In production, you would use a more robust API like Monad Explorer or
+        // an indexing service to search for all transactions to the destination address
+        // Here we use a simulation for tests
 
-        // Simulação para ambiente de desenvolvimento
+        // Simulation for development environment
         if (process.env.NODE_ENV === 'development') {
-            // 80% de chance de sucesso para facilitar testes
+            // 80% chance of success for easier tests
             const randomSuccess = Math.random() < 0.8;
             const mockTxHash = "0x" + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join("");
 
-            console.log(`[SIMULAÇÃO] Resultado: ${randomSuccess ? "Transação encontrada" : "Transação não encontrada"}`);
+            console.log(`[SIMULATION] Result: ${randomSuccess ? "Transaction found" : "Transaction not found"}`);
 
             return {
                 success: randomSuccess,
@@ -370,36 +370,39 @@ async function checkTransactionVerification(fromAddress, toAddress, exactAmount)
             };
         }
 
-        // Em ambiente de produção, você implementaria algo como:
+        // In production environment, you would implement something like:
         /*
-        // Obter transações recentes para o endereço de destino usando uma API do Monad
+        // Get recent transactions for the destination address using a Monad API
         const transactions = await getRecentTransactionsForAddress(toAddress, fromBlock, latestBlock);
         
-        // Procurar por uma transação que corresponda aos critérios
+        // Search for a transaction that matches the criteria
         for (const tx of transactions) {
-            // Verificar se é do remetente correto e tem o valor exato
+            // Verify if it's from the correct sender and has the exact amount
             if (
                 tx.from.toLowerCase() === fromAddress &&
                 tx.to.toLowerCase() === toAddress &&
                 Math.abs(parseFloat(ethers.utils.formatEther(tx.value)) - exactAmount) < 0.0000001
             ) {
-                console.log(`Transação válida encontrada: ${tx.hash}`);
+                console.log(`Valid transaction found: ${tx.hash}`);
                 return { success: true, txHash: tx.hash };
             }
         }
         */
 
-        // Como não temos acesso direto à API completa da Monad agora, retornamos sucesso simulado
-        // Isso deve ser substituído pela implementação real em produção
+        // Since we don't have direct access to the complete Monad API now, we return simulated success
+        // This should be replaced with actual implementation in production
         const simulatedSuccess = Math.random() < 0.5;
         const simulatedTxHash = simulatedSuccess ?
             "0x" + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join("") :
             null;
 
-        return { success: simulatedSuccess, txHash: simulatedTxHash };
+        return {
+            success: simulatedSuccess,
+            txHash: simulatedTxHash
+        };
 
     } catch (error) {
-        console.error('Erro ao verificar transação:', error);
+        console.error('Error checking transaction:', error);
         return { success: false, txHash: null };
     }
 }
@@ -407,5 +410,7 @@ async function checkTransactionVerification(fromAddress, toAddress, exactAmount)
 module.exports = {
     checkAllUsersNfts,
     checkUserNfts,
+    getNftsForCollection,
+    getERC721NftsForCollection,
     checkTransactionVerification
 }; 

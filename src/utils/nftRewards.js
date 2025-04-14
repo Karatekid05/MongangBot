@@ -10,14 +10,14 @@ const TEAM_ROLE_IDS = [
 ];
 
 /**
- * Calcula e distribui recompensas diárias para detentores de NFTs
- * @param {Object} client - Cliente Discord
+ * Calculates and distributes daily rewards for NFT holders
+ * @param {Object} client - Discord client
  */
 async function dailyNftRewards(client) {
   try {
-    console.log('Iniciando distribuição de recompensas diárias de NFTs...');
+    console.log('Starting distribution of daily NFT rewards...');
 
-    // Encontrar todos os usuários com NFTs
+    // Find all users with NFTs
     const users = await User.find({
       $or: [
         { 'nfts.collection1Count': { $gt: 0 } },
@@ -25,7 +25,7 @@ async function dailyNftRewards(client) {
       ]
     });
 
-    console.log(`Encontrados ${users.length} usuários com NFTs`);
+    console.log(`Found ${users.length} users with NFTs`);
 
     // Get guild to check for team members
     const guild = client.guilds.cache.first();
@@ -34,7 +34,7 @@ async function dailyNftRewards(client) {
       return { success: 0, failed: 0, skipped: 0, total: 0, rewards: 0 };
     }
 
-    // Distribuir recompensas
+    // Distribute rewards
     let totalRewards = 0;
     const results = {
       success: 0,
@@ -53,7 +53,7 @@ async function dailyNftRewards(client) {
         try {
           const member = await guild.members.fetch(user.userId);
 
-          // Usar ambos os métodos de verificação para garantir consistência
+          // Use both verification methods to ensure consistency
           isTeamMember = TEAM_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
           isModeratorCheck = isModerator(member);
 
@@ -67,20 +67,20 @@ async function dailyNftRewards(client) {
           // Continue with rewards since we can't verify roles
         }
 
-        // Calcular recompensas fixas baseadas na presença de NFTs
-        // Recompensa fixa de 500 $CASH por ter qualquer quantidade de NFTs da coleção 1
+        // Calculate fixed rewards based on NFT ownership
+        // Fixed reward of 500 $CASH for owning any number of NFTs from collection 1
         const collection1Reward = user.nfts.collection1Count > 0 ? NFT_COLLECTION1_DAILY_REWARD : 0;
-        // Recompensa fixa de 100 $CASH por ter qualquer quantidade de NFTs da coleção 2
+        // Fixed reward of 100 $CASH for owning any number of NFTs from collection 2
         const collection2Reward = user.nfts.collection2Count > 0 ? NFT_COLLECTION2_DAILY_REWARD : 0;
         const dailyReward = collection1Reward + collection2Reward;
 
         if (dailyReward > 0) {
-          // Adicionar recompensas ao saldo do usuário
+          // Add rewards to user's balance
           user.cash += dailyReward;
           user.weeklyCash += dailyReward;
           user.pointsBySource.nftRewards += dailyReward;
 
-          // Salvar alterações
+          // Save changes
           await user.save();
 
           totalRewards += dailyReward;
@@ -89,45 +89,45 @@ async function dailyNftRewards(client) {
 
           console.log(`NFT rewards awarded to ${user.username}: +${dailyReward} $CASH (${collection1Reward} from coll1, ${collection2Reward} from coll2)`);
 
-          // Enviar mensagem ao usuário sobre as recompensas (opcional)
+          // Send a message to the user about rewards (optional)
           try {
             const discordUser = await client.users.fetch(user.userId);
             await discordUser.send(
-              `Você recebeu ${dailyReward} $CASH como recompensa diária pelos seus NFTs:\n` +
-              `• Coleção 1: ${user.nfts.collection1Count > 0 ? `${NFT_COLLECTION1_DAILY_REWARD} $CASH` : "0 $CASH"}\n` +
-              `• Coleção 2: ${user.nfts.collection2Count > 0 ? `${NFT_COLLECTION2_DAILY_REWARD} $CASH` : "0 $CASH"}\n\n` +
-              `Seu saldo atual: ${user.cash} $CASH`
+              `You received ${dailyReward} $CASH as daily reward for your NFTs:\n` +
+              `• Collection 1: ${user.nfts.collection1Count > 0 ? `${NFT_COLLECTION1_DAILY_REWARD} $CASH` : "0 $CASH"}\n` +
+              `• Collection 2: ${user.nfts.collection2Count > 0 ? `${NFT_COLLECTION2_DAILY_REWARD} $CASH` : "0 $CASH"}\n\n` +
+              `Your current balance: ${user.cash} $CASH`
             );
           } catch (dmError) {
-            console.warn(`Não foi possível enviar DM para ${user.username}:`, dmError.message);
+            console.warn(`Could not send DM to ${user.username}:`, dmError.message);
           }
         }
       } catch (userError) {
-        console.error(`Erro ao processar recompensas para ${user.username}:`, userError);
+        console.error(`Error processing rewards for ${user.username}:`, userError);
         results.failed++;
       }
     }
 
-    console.log(`Recompensas de NFT distribuídas: ${results.success} usuários, ${results.skipped} pulados (equipe), ${results.rewards} $CASH total`);
+    console.log(`NFT rewards distributed: ${results.success} users, ${results.skipped} skipped (team members), ${results.rewards} $CASH total`);
     return results;
   } catch (error) {
-    console.error('Erro ao distribuir recompensas de NFT:', error);
+    console.error('Error distributing NFT rewards:', error);
     throw error;
   }
 }
 
 /**
- * Atualiza as posses de NFT de um usuário
- * @param {Object} user - Documento do usuário no MongoDB
- * @param {Object} nftCounts - Contagens de NFT por coleção
+ * Updates a user's NFT holdings
+ * @param {Object} user - User document in MongoDB
+ * @param {Object} nftCounts - NFT counts by collection
  */
 async function updateNftHoldings(user, nftCounts) {
   try {
-    // Atualizar contagens de NFT
+    // Update NFT counts
     user.nfts.collection1Count = nftCounts.collection1Count || 0;
     user.nfts.collection2Count = nftCounts.collection2Count || 0;
 
-    // Salvar alterações
+    // Save changes
     await user.save();
 
     return {
@@ -135,7 +135,7 @@ async function updateNftHoldings(user, nftCounts) {
       collection2Count: user.nfts.collection2Count
     };
   } catch (error) {
-    console.error(`Erro ao atualizar posses de NFT para ${user.username}:`, error);
+    console.error(`Error updating NFT holdings for ${user.username}:`, error);
     throw error;
   }
 }
