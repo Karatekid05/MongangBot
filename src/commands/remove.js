@@ -41,10 +41,11 @@ module.exports = {
     await interaction.deferReply();
 
     // Remove the cash
-    const success = await removeCash(targetUser.id, amount);
+    const result = await removeCash(targetUser.id, amount);
 
-    if (success) {
-      await interaction.editReply(`Successfully removed ${amount} $CASH from ${targetUser.username}`);
+    if (result.success) {
+      const actualAmount = result.amountRemoved || amount;
+      await interaction.editReply(`Successfully removed ${actualAmount} $CASH from ${targetUser.username}`);
     } else {
       await interaction.editReply('Failed to remove $CASH. The user may not be registered in the system.');
     }

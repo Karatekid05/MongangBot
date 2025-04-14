@@ -1,5 +1,13 @@
 const User = require('../models/User');
 const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD } = require('./constants');
+const { isModerator } = require('./permissions');
+
+// Role IDs para membros da equipe que não devem ganhar recompensas
+// Deve ser idêntico ao definido em pointsManager.js e permissions.js
+const TEAM_ROLE_IDS = [
+  '1339293248308641883', // Founders
+  '1338993206112817283'  // Moderators
+];
 
 /**
  * Calcula e distribui recompensas diárias para detentores de NFTs
@@ -19,17 +27,46 @@ async function dailyNftRewards(client) {
 
     console.log(`Encontrados ${users.length} usuários com NFTs`);
 
+    // Get guild to check for team members
+    const guild = client.guilds.cache.first();
+    if (!guild) {
+      console.error('Could not find Discord guild to check roles');
+      return { success: 0, failed: 0, skipped: 0, total: 0, rewards: 0 };
+    }
+
     // Distribuir recompensas
     let totalRewards = 0;
     const results = {
       success: 0,
       failed: 0,
+      skipped: 0,
       total: users.length,
       rewards: 0
     };
 
     for (const user of users) {
       try {
+        // Check if the user is a team member (Founder or Moderator)
+        let isTeamMember = false;
+        let isModeratorCheck = false;
+
+        try {
+          const member = await guild.members.fetch(user.userId);
+
+          // Usar ambos os métodos de verificação para garantir consistência
+          isTeamMember = TEAM_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
+          isModeratorCheck = isModerator(member);
+
+          if (isTeamMember || isModeratorCheck) {
+            console.log(`User ${user.username} is a team member and won't earn NFT rewards. Role check: ${isTeamMember}, Mod check: ${isModeratorCheck}`);
+            results.skipped++;
+            continue; // Skip to next user
+          }
+        } catch (memberError) {
+          console.warn(`Could not check team roles for ${user.username}: ${memberError.message}`);
+          // Continue with rewards since we can't verify roles
+        }
+
         // Calcular recompensas baseadas na quantidade de NFTs
         const collection1Reward = user.nfts.collection1Count * NFT_COLLECTION1_DAILY_REWARD;
         const collection2Reward = user.nfts.collection2Count * NFT_COLLECTION2_DAILY_REWARD;
@@ -47,6 +84,8 @@ async function dailyNftRewards(client) {
           totalRewards += dailyReward;
           results.success++;
           results.rewards += dailyReward;
+
+          console.log(`NFT rewards awarded to ${user.username}: +${dailyReward} $CASH (${collection1Reward} from coll1, ${collection2Reward} from coll2)`);
 
           // Enviar mensagem ao usuário sobre as recompensas (opcional)
           try {
@@ -67,7 +106,7 @@ async function dailyNftRewards(client) {
       }
     }
 
-    console.log(`Recompensas de NFT distribuídas: ${results.success} usuários, ${results.rewards} $CASH total`);
+    console.log(`Recompensas de NFT distribuídas: ${results.success} usuários, ${results.skipped} pulados (equipe), ${results.rewards} $CASH total`);
     return results;
   } catch (error) {
     console.error('Erro ao distribuir recompensas de NFT:', error);

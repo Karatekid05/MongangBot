@@ -86,6 +86,18 @@ const userSchema = new mongoose.Schema({
             type: Number,
             default: 0
         }
+    },
+    // Histórico de contribuições por gang
+    // Quando um usuário muda de gang, o cash já acumulado fica com a gang anterior
+    gangContributions: {
+        type: Map,
+        of: Number,
+        default: {}
+    },
+    // Gang anterior (para referência)
+    previousGangId: {
+        type: String,
+        default: null
     }
 }, { timestamps: true });
 

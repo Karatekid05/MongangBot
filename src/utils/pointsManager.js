@@ -1,6 +1,17 @@
 const User = require('../models/User');
 const Gang = require('../models/Gang');
 const { POINTS_PER_MESSAGE, MESSAGE_COOLDOWN_MS, GANGS } = require('./constants');
+const { client } = require('../index'); // Assuming client is imported from index.js
+
+// Role IDs para membros da equipe que não devem ganhar pontos
+// ATENÇÃO: Verificar se estes IDs estão corretos - devem corresponder aos roles no Discord
+const TEAM_ROLE_IDS = [
+    '1339293248308641883', // Founders
+    '1338993206112817283'  // Moderators
+];
+
+// Importar do arquivo de permissões para garantir consistência
+const { isModerator } = require('./permissions');
 
 /**
  * Handle message points - award points for messages in gang channels
@@ -15,18 +26,29 @@ async function handleMessagePoints(message) {
         // Get user info
         const userId = message.author.id;
 
+        // Fetch Discord member to check roles
+        const member = await message.guild.members.fetch(userId).catch(err => {
+            console.error(`Could not fetch member ${userId}:`, err);
+            return null;
+        });
+
+        if (!member) return; // Could not fetch member
+
+        // Check if the user has any team role (Founders or Moderators)
+        // Usar ambos os métodos para garantir verificação correta
+        const isTeamMember = TEAM_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
+        const isModeratorCheck = isModerator(member);
+
+        // Se o usuário for membro da equipe, não conceder pontos
+        if (isTeamMember || isModeratorCheck) {
+            console.log(`User ${member.user.username} is a team member and won't earn points. Role check: ${isTeamMember}, Mod check: ${isModeratorCheck}`);
+            return; // Encerrar a função sem conceder pontos
+        }
+
         // Find or create user
         let user = await User.findOne({ userId });
 
         if (!user) {
-            // Fetch Discord member to check roles
-            const member = await message.guild.members.fetch(userId).catch(err => {
-                console.error(`Could not fetch member ${userId}:`, err);
-                return null;
-            });
-
-            if (!member) return; // Could not fetch member
-
             // Check all gangs to find one the user belongs to
             let userGang = GANGS.find(gang => member.roles.cache.has(gang.roleId));
 
@@ -75,12 +97,26 @@ async function handleMessagePoints(message) {
                 console.error(`Error saving new user ${message.author.username}:`, saveError);
                 return; // Exit if we can't save the user
             }
+        } else {
+            // Verificação adicional para usuários existentes
+            // Se o usuário já existir no banco de dados, ainda verificamos se ele é moderador
+            // Esta verificação dupla garante que moderadores nunca ganhem pontos
+            if (isTeamMember || isModeratorCheck) {
+                console.log(`Existing user ${user.username} is a team member and won't earn points.`);
+                return;
+            }
         }
 
         // Check cooldown
         const now = new Date();
         if (user.lastMessageReward && now - user.lastMessageReward < MESSAGE_COOLDOWN_MS) {
             return; // Message is on cooldown, don't award points
+        }
+
+        // Verificação final antes de conceder pontos
+        if (isTeamMember || isModeratorCheck) {
+            console.log(`Final check: User ${user.username} is a team member and won't earn points.`);
+            return;
         }
 
         // Award points
@@ -92,6 +128,7 @@ async function handleMessagePoints(message) {
         // Save user
         try {
             await user.save();
+            console.log(`Points awarded to ${user.username}: +${POINTS_PER_MESSAGE} (current total: ${user.cash})`);
         } catch (saveError) {
             console.error(`Error saving points for ${message.author.username}:`, saveError);
             return;
@@ -135,7 +172,7 @@ async function awardCash(userId, source, amount) {
         // Save user
         await user.save();
 
-        // Update gang totals
+        // Update gang totals for current gang only
         await updateGangTotals(user.gangId);
 
         return true;
@@ -157,19 +194,24 @@ async function removeCash(userId, amount) {
         if (!user) return false;
 
         // Remove points (don't go below 0)
+        const prevCash = user.cash;
         user.cash = Math.max(0, user.cash - amount);
         user.weeklyCash = Math.max(0, user.weeklyCash - amount);
+
+        // Calculate actual amount removed (in case user had less than amount)
+        const actualAmountRemoved = prevCash - user.cash;
 
         // Save user
         await user.save();
 
-        // Update gang totals
+        // Update gang totals only for current gang
+        // Cash contributed to previous gangs remains untouched
         await updateGangTotals(user.gangId);
 
-        return true;
+        return { success: true, amountRemoved: actualAmountRemoved };
     } catch (error) {
         console.error('Error removing cash:', error);
-        return false;
+        return { success: false, amountRemoved: 0 };
     }
 }
 
@@ -220,7 +262,7 @@ async function removeTrophy(gangId) {
 }
 
 /**
- * Update gang total cash based on members
+ * Update gang total cash based on members and past contributions
  * @param {string} gangId - Gang role ID
  */
 async function updateGangTotals(gangId) {
@@ -228,17 +270,46 @@ async function updateGangTotals(gangId) {
         // Get all members in the gang
         const users = await User.find({ gangId });
 
-        // Calculate totals
-        const totalCash = users.reduce((sum, user) => sum + user.cash, 0);
-        const weeklyTotalCash = users.reduce((sum, user) => sum + user.weeklyCash, 0);
+        // Calcular o total de cash atual dos membros
+        const currentMembersCash = users.reduce((sum, user) => sum + user.cash, 0);
+        const weeklyMembersCash = users.reduce((sum, user) => sum + user.weeklyCash, 0);
+
+        // Agora vamos adicionar as contribuições históricas de usuários que mudaram de gang
+        // Buscar todos os usuários que já contribuíram para esta gang (mesmo não sendo mais membros)
+        const contributingUsers = await User.find({
+            $or: [
+                { [`gangContributions.${gangId}`]: { $exists: true, $gt: 0 } },
+                { gangId: gangId }
+            ]
+        });
+
+        // Calcular contribuições históricas
+        let historicalContributions = 0;
+
+        for (const user of contributingUsers) {
+            // Se o usuário não é mais membro desta gang mas contribuiu no passado
+            if (user.gangId !== gangId && user.gangContributions && user.gangContributions.get(gangId)) {
+                const contributionAmount = user.gangContributions.get(gangId) || 0;
+                historicalContributions += contributionAmount;
+                console.log(`User ${user.username} has historical contribution of ${contributionAmount} to gang ${gangId}`);
+            }
+        }
+
+        // O total de cash é a soma do cash atual dos membros + contribuições históricas
+        const totalCash = currentMembersCash + historicalContributions;
+
+        console.log(`Gang ${gangId} totals: Current members: ${currentMembersCash}, Historical: ${historicalContributions}, Total: ${totalCash}`);
 
         // Update gang
         await Gang.findOneAndUpdate(
             { roleId: gangId },
-            { totalCash, weeklyTotalCash }
+            { totalCash, weeklyTotalCash: weeklyMembersCash }
         );
+
+        return { totalCash, weeklyTotalCash: weeklyMembersCash, historicalContributions };
     } catch (error) {
         console.error('Error updating gang totals:', error);
+        return null;
     }
 }
 
@@ -297,7 +368,8 @@ async function transferCash(fromUserId, toUserId, amount) {
         await fromUser.save();
         await toUser.save();
 
-        // Update gang totals for both users
+        // Update gang totals for both users' current gangs only
+        // Histórico de contribuições para gangs anteriores permanece intacto
         await updateGangTotals(fromUser.gangId);
         await updateGangTotals(toUser.gangId);
 

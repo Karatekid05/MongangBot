@@ -1,6 +1,12 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { transferCash } = require('../utils/pointsManager');
 
+// Role IDs for team members who shouldn't receive cash
+const TEAM_ROLE_IDS = [
+    '1339293248308641883', // Founders
+    '1338993206112817283'  // Moderators
+];
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('give')
@@ -32,6 +38,22 @@ module.exports = {
                 content: 'You cannot give $CASH to a bot!',
                 ephemeral: true
             });
+        }
+
+        // Check if the target user is a team member (Founder or Moderator)
+        try {
+            const targetMember = await interaction.guild.members.fetch(targetUser.id);
+            const isTeamMember = TEAM_ROLE_IDS.some(roleId => targetMember.roles.cache.has(roleId));
+
+            if (isTeamMember) {
+                return interaction.reply({
+                    content: 'You cannot give $CASH to team members (Founders or Moderators).',
+                    ephemeral: true
+                });
+            }
+        } catch (error) {
+            console.warn(`Could not check team roles for ${targetUser.username}:`, error);
+            // Continue anyway since we can't verify
         }
 
         // Validate amount

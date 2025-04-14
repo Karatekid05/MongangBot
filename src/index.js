@@ -126,28 +126,68 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     if (oldMember.roles.cache.size === newMember.roles.cache.size) return;
 
     try {
-        for (const gang of GANGS) {
-            const hadRole = oldMember.roles.cache.has(gang.roleId);
-            const hasRole = newMember.roles.cache.has(gang.roleId);
+        // Primeiro, verificamos se o usuário está mudando de gang
+        let oldGang = null;
+        let newGang = null;
 
-            // If the user received a new gang role
-            if (!hadRole && hasRole) {
+        // Encontrar a gang antiga, se existir
+        for (const gang of GANGS) {
+            if (oldMember.roles.cache.has(gang.roleId) && !newMember.roles.cache.has(gang.roleId)) {
+                oldGang = gang;
+            }
+        }
+
+        // Encontrar a nova gang, se existir
+        for (const gang of GANGS) {
+            // Se o usuário não tinha esse role antes e tem agora
+            if (!oldMember.roles.cache.has(gang.roleId) && newMember.roles.cache.has(gang.roleId)) {
+                newGang = gang;
+
+                // Buscar o usuário no banco de dados
                 let user = await User.findOne({ userId: newMember.id });
 
                 if (user) {
-                    // Update existing user's gang
-                    user.gangId = gang.roleId;
-                    await user.save();
-                    console.log(`Gang updated for ${newMember.user.username}: ${gang.name}`);
+                    // Usuário existente mudando de gang
+                    console.log(`User ${newMember.user.username} changing gang: ${user.gangId} -> ${gang.roleId}`);
+
+                    // Verifica se realmente é uma mudança de gang (não apenas adição de outro role)
+                    if (user.gangId !== gang.roleId) {
+                        const previousGangId = user.gangId;
+
+                        // Salvar contribuição atual para a gang antiga
+                        if (!user.gangContributions) {
+                            user.gangContributions = new Map();
+                        }
+
+                        // Armazenar a contribuição atual na gang anterior
+                        const currentContribution = user.gangContributions.get(previousGangId) || 0;
+                        user.gangContributions.set(previousGangId, currentContribution + user.cash);
+
+                        console.log(`Stored ${user.cash} $CASH as contribution to previous gang ${previousGangId}`);
+
+                        // Atualizar a gang nos dados do usuário
+                        user.previousGangId = previousGangId;
+                        user.gangId = gang.roleId;
+
+                        // Salvar as alterações
+                        await user.save();
+
+                        console.log(`Gang updated for ${newMember.user.username}: ${gang.name}`);
+
+                        // Atualizar os totais das duas gangs
+                        await updateGangTotals(previousGangId);
+                        await updateGangTotals(gang.roleId);
+                    }
                 } else {
-                    // Create new user
+                    // Criar novo usuário
                     user = new User({
                         userId: newMember.id,
                         username: newMember.user.username,
                         gangId: gang.roleId,
                         cash: 0,
                         weeklyCash: 0,
-                        lastMessageReward: new Date(0)
+                        lastMessageReward: new Date(0),
+                        gangContributions: new Map()
                     });
                     await user.save();
                     console.log(`New user created for ${newMember.user.username} in gang ${gang.name}`);

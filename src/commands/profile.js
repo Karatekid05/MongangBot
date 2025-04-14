@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const User = require('../models/User');
 const Gang = require('../models/Gang');
+const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD } = require('../utils/constants');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -54,7 +55,7 @@ module.exports = {
             // Calculate total daily NFT rewards
             const collection1Count = userData.nfts?.collection1Count || 0;
             const collection2Count = userData.nfts?.collection2Count || 0;
-            const dailyNftRewards = (collection1Count * 100) + (collection2Count * 10);
+            const dailyNftRewards = (collection1Count * NFT_COLLECTION1_DAILY_REWARD) + (collection2Count * NFT_COLLECTION2_DAILY_REWARD);
 
             // Create embed with user information
             const embed = new EmbedBuilder()
@@ -75,7 +76,7 @@ module.exports = {
             // NFT section - Mais focado nas recompensas diárias
             embed.addFields({
                 name: '🖼️ NFT Holdings',
-                value: `🖼️ **Collection 1:** ${collection1Count} NFTs\n🖼️ **Collection 2:** ${collection2Count} NFTs\n💰 **Daily NFT Rewards:** ${dailyNftRewards} $CASH`,
+                value: `🖼️ **Collection 1:** ${collection1Count} NFTs (${collection1Count * NFT_COLLECTION1_DAILY_REWARD} $CASH/day)\n🖼️ **Collection 2:** ${collection2Count} NFTs (${collection2Count * NFT_COLLECTION2_DAILY_REWARD} $CASH/day)\n💰 **Daily NFT Rewards:** ${dailyNftRewards} $CASH`,
                 inline: false
             });
 
