@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD } = require('./constants');
 
 /**
  * Calcula e distribui recompensas diárias para detentores de NFTs
@@ -30,8 +31,8 @@ async function dailyNftRewards(client) {
     for (const user of users) {
       try {
         // Calcular recompensas baseadas na quantidade de NFTs
-        const collection1Reward = user.nfts.collection1Count * 100;
-        const collection2Reward = user.nfts.collection2Count * 10;
+        const collection1Reward = user.nfts.collection1Count * NFT_COLLECTION1_DAILY_REWARD;
+        const collection2Reward = user.nfts.collection2Count * NFT_COLLECTION2_DAILY_REWARD;
         const dailyReward = collection1Reward + collection2Reward;
 
         if (dailyReward > 0) {
@@ -75,40 +76,26 @@ async function dailyNftRewards(client) {
 }
 
 /**
- * Atualiza as posses de NFT de um usuário no banco de dados
- * @param {string} userId - ID do Discord do usuário
- * @param {number} collection1Count - Número de NFTs da coleção 1
- * @param {number} collection2Count - Número de NFTs da coleção 2
+ * Atualiza as posses de NFT de um usuário
+ * @param {Object} user - Documento do usuário no MongoDB
+ * @param {Object} nftCounts - Contagens de NFT por coleção
  */
-async function updateNftHoldings(userId, collection1Count, collection2Count) {
+async function updateNftHoldings(user, nftCounts) {
   try {
-    // Encontrar e atualizar o usuário
-    const user = await User.findOne({ userId });
-
-    if (!user) {
-      console.warn(`Usuário ${userId} não encontrado para atualização de NFT`);
-      return false;
-    }
-
-    // Verificar se houve alteração
-    if (
-      user.nfts.collection1Count === collection1Count &&
-      user.nfts.collection2Count === collection2Count
-    ) {
-      return false; // Sem alterações
-    }
-
-    // Atualizar contagens
-    user.nfts.collection1Count = collection1Count;
-    user.nfts.collection2Count = collection2Count;
+    // Atualizar contagens de NFT
+    user.nfts.collection1Count = nftCounts.collection1Count || 0;
+    user.nfts.collection2Count = nftCounts.collection2Count || 0;
 
     // Salvar alterações
     await user.save();
-    console.log(`NFTs atualizados para ${user.username}: Coleção 1: ${collection1Count}, Coleção 2: ${collection2Count}`);
-    return true;
+
+    return {
+      collection1Count: user.nfts.collection1Count,
+      collection2Count: user.nfts.collection2Count
+    };
   } catch (error) {
-    console.error(`Erro ao atualizar NFTs para ${userId}:`, error);
-    return false;
+    console.error(`Erro ao atualizar posses de NFT para ${user.username}:`, error);
+    throw error;
   }
 }
 

@@ -2,6 +2,7 @@ const { SlashCommandBuilder } = require('discord.js');
 const Web3Utils = require('web3-utils');
 const User = require('../models/User');
 const { checkUserNfts } = require('../utils/monadNftChecker');
+const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD } = require('../utils/constants');
 
 // Constantes para verificação
 const VERIFICATION_WALLET = "0x8d9a1522114025867BFCCa01E19708def4F23599";
@@ -154,8 +155,8 @@ async function verifyTransaction(userId, client) {
                 const updatedUser = await User.findOne({ userId });
 
                 // Calcular recompensas diárias
-                const collection1Reward = updatedUser.nfts.collection1Count * 100;
-                const collection2Reward = updatedUser.nfts.collection2Count * 10;
+                const collection1Reward = updatedUser.nfts.collection1Count * NFT_COLLECTION1_DAILY_REWARD;
+                const collection2Reward = updatedUser.nfts.collection2Count * NFT_COLLECTION2_DAILY_REWARD;
                 const totalDailyReward = collection1Reward + collection2Reward;
 
                 // Notificar o usuário

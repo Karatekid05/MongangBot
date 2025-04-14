@@ -2,6 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { checkAllUsersNfts, checkUserNfts } = require('../utils/monadNftChecker');
 const User = require('../models/User');
 const { isModerator } = require('../utils/permissions');
+const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD } = require('../utils/constants');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -43,11 +44,14 @@ module.exports = {
                 const nftHoldings = await checkUserNfts(user.userId, user.walletAddress);
 
                 if (nftHoldings) {
+                    const dailyReward = (nftHoldings.collection1Count * NFT_COLLECTION1_DAILY_REWARD) +
+                        (nftHoldings.collection2Count * NFT_COLLECTION2_DAILY_REWARD);
+
                     await interaction.editReply(
                         `NFTs updated for ${targetUser.username}:\n` +
-                        `- Collection 1: ${nftHoldings.collection1Count} NFTs\n` +
-                        `- Collection 2: ${nftHoldings.collection2Count} NFTs\n\n` +
-                        `Daily reward: ${nftHoldings.collection1Count * 100 + nftHoldings.collection2Count * 10} $CASH`
+                        `- Collection 1: ${nftHoldings.collection1Count} NFTs (${nftHoldings.collection1Count * NFT_COLLECTION1_DAILY_REWARD} $CASH/day)\n` +
+                        `- Collection 2: ${nftHoldings.collection2Count} NFTs (${nftHoldings.collection2Count * NFT_COLLECTION2_DAILY_REWARD} $CASH/day)\n\n` +
+                        `Daily reward: ${dailyReward} $CASH`
                     );
                 } else {
                     await interaction.editReply(`Could not verify NFTs for ${targetUser.username}.`);

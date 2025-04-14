@@ -60,6 +60,7 @@ NFT_COLLECTION2_ADDRESS=0x0987654321098765432109876543210987654321
 
 ### User Commands
 
+- `/help` - Display user guide or moderator guide with interactive buttons
 - `/leaderboard type:[Members/Gangs/Specific Gang] weekly:[true/false]` - Show leaderboards
 - `/registerwallet address:0x...` - Register your Monad wallet for NFT verification
 - `/give user:@user amount:50` - Give some of your $CASH to another user
@@ -78,8 +79,8 @@ NFT_COLLECTION2_ADDRESS=0x0987654321098765432109876543210987654321
 ## Points System
 
 - Members earn 10 $CASH per message in their gang channel (20-second cooldown)
-- NFT Collection 1: 100 $CASH daily per NFT
-- NFT Collection 2: 10 $CASH daily per NFT
+- NFT Collection 1: 500 $CASH daily per NFT
+- NFT Collection 2: 100 $CASH daily per NFT
 - Moderators can award or remove points manually
 
 ## Gangs

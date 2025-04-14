@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const User = require('../models/User');
 const { isModerator } = require('../utils/permissions');
+const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD } = require('../utils/constants');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -33,15 +34,14 @@ module.exports = {
             });
         }
 
-        // Get command options
         const targetUser = interaction.options.getUser('user');
-        const collection1 = interaction.options.getInteger('collection1');
-        const collection2 = interaction.options.getInteger('collection2');
+        const collection1Count = interaction.options.getInteger('collection1');
+        const collection2Count = interaction.options.getInteger('collection2');
 
-        // At least one collection amount must be provided
-        if (collection1 === null && collection2 === null) {
+        // Validate inputs - check if at least one collection is specified
+        if (collection1Count === null && collection2Count === null) {
             return interaction.reply({
-                content: 'You must specify at least one collection amount to update.',
+                content: 'You must specify at least one collection count to update.',
                 ephemeral: true
             });
         }
@@ -52,33 +52,26 @@ module.exports = {
 
             if (!user) {
                 return interaction.reply({
-                    content: `${targetUser.username} is not registered in the system. They need to send a message in a gang channel first.`,
+                    content: `User ${targetUser.username} is not registered in the system.`,
                     ephemeral: true
                 });
             }
 
-            // If user has no wallet address registered, inform the moderator
-            if (!user.walletAddress) {
-                return interaction.reply({
-                    content: `${targetUser.username} has not registered a wallet address yet. They need to use /registerwallet first.`,
-                    ephemeral: true
-                });
-            }
-
-            // Update NFT counts if provided
-            let updated = false;
+            // Save original values for confirmation message
             const originalValues = {
                 collection1: user.nfts.collection1Count,
                 collection2: user.nfts.collection2Count
             };
 
-            if (collection1 !== null) {
-                user.nfts.collection1Count = collection1;
+            // Update NFT counts if provided
+            let updated = false;
+            if (collection1Count !== null) {
+                user.nfts.collection1Count = collection1Count;
                 updated = true;
             }
 
-            if (collection2 !== null) {
-                user.nfts.collection2Count = collection2;
+            if (collection2Count !== null) {
+                user.nfts.collection2Count = collection2Count;
                 updated = true;
             }
 
@@ -86,13 +79,14 @@ module.exports = {
                 await user.save();
 
                 // Calculate daily rewards
-                const dailyReward = (user.nfts.collection1Count * 100) + (user.nfts.collection2Count * 10);
+                const dailyReward = (user.nfts.collection1Count * NFT_COLLECTION1_DAILY_REWARD) +
+                    (user.nfts.collection2Count * NFT_COLLECTION2_DAILY_REWARD);
 
                 // Build confirmation message
                 const message = [
                     `NFT holdings updated for ${targetUser.username}:`,
-                    `• Collection 1: ${originalValues.collection1} → ${user.nfts.collection1Count}`,
-                    `• Collection 2: ${originalValues.collection2} → ${user.nfts.collection2Count}`,
+                    `• Collection 1: ${originalValues.collection1} → ${user.nfts.collection1Count} (${user.nfts.collection1Count * NFT_COLLECTION1_DAILY_REWARD} $CASH/day)`,
+                    `• Collection 2: ${originalValues.collection2} → ${user.nfts.collection2Count} (${user.nfts.collection2Count * NFT_COLLECTION2_DAILY_REWARD} $CASH/day)`,
                     ``,
                     `Daily reward: ${dailyReward} $CASH`
                 ].join('\n');
@@ -114,5 +108,5 @@ module.exports = {
                 ephemeral: true
             });
         }
-    },
+    }
 }; 
