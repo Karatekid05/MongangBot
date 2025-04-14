@@ -258,6 +258,59 @@ async function resetWeeklyStats() {
     }
 }
 
+/**
+ * Transfer cash from one user to another
+ * @param {string} fromUserId - Discord user ID of the sender
+ * @param {string} toUserId - Discord user ID of the recipient
+ * @param {number} amount - Amount to transfer
+ * @returns {Object} Result with success status and message
+ */
+async function transferCash(fromUserId, toUserId, amount) {
+    try {
+        // Find both users
+        const fromUser = await User.findOne({ userId: fromUserId });
+        const toUser = await User.findOne({ userId: toUserId });
+
+        // Check if both users exist
+        if (!fromUser || !toUser) {
+            return {
+                success: false,
+                message: !fromUser
+                    ? 'Sender is not registered in the system'
+                    : 'Recipient is not registered in the system'
+            };
+        }
+
+        // Check if sender has enough cash
+        if (fromUser.cash < amount) {
+            return {
+                success: false,
+                message: `You don't have enough cash. Your balance: ${fromUser.cash} $CASH`
+            };
+        }
+
+        // Perform the transfer
+        fromUser.cash -= amount;
+        toUser.cash += amount;
+
+        // Save both users
+        await fromUser.save();
+        await toUser.save();
+
+        // Update gang totals for both users
+        await updateGangTotals(fromUser.gangId);
+        await updateGangTotals(toUser.gangId);
+
+        return {
+            success: true,
+            message: `Successfully transferred ${amount} $CASH to the user. Your new balance: ${fromUser.cash} $CASH`
+        };
+    } catch (error) {
+        console.error('Error transferring cash:', error);
+        return { success: false, message: 'Error transferring cash. Please try again later.' };
+    }
+}
+
 module.exports = {
     handleMessagePoints,
     awardCash,
@@ -265,5 +318,6 @@ module.exports = {
     awardTrophy,
     removeTrophy,
     updateGangTotals,
-    resetWeeklyStats
+    resetWeeklyStats,
+    transferCash
 }; 
