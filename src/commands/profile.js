@@ -52,10 +52,10 @@ module.exports = {
                 }
             }
 
-            // Calculate total daily NFT rewards
-            const collection1Count = userData.nfts?.collection1Count || 0;
-            const collection2Count = userData.nfts?.collection2Count || 0;
-            const dailyNftRewards = (collection1Count * NFT_COLLECTION1_DAILY_REWARD) + (collection2Count * NFT_COLLECTION2_DAILY_REWARD);
+            // Calculate fixed daily NFT rewards
+            const collection1Reward = userData.nfts?.collection1Count > 0 ? NFT_COLLECTION1_DAILY_REWARD : 0;
+            const collection2Reward = userData.nfts?.collection2Count > 0 ? NFT_COLLECTION2_DAILY_REWARD : 0;
+            const dailyNftRewards = collection1Reward + collection2Reward;
 
             // Create embed with user information
             const embed = new EmbedBuilder()
@@ -76,7 +76,7 @@ module.exports = {
             // NFT section - Mais focado nas recompensas diárias
             embed.addFields({
                 name: '🖼️ NFT Holdings',
-                value: `🖼️ **Collection 1:** ${collection1Count} NFTs (${collection1Count * NFT_COLLECTION1_DAILY_REWARD} $CASH/day)\n🖼️ **Collection 2:** ${collection2Count} NFTs (${collection2Count * NFT_COLLECTION2_DAILY_REWARD} $CASH/day)\n💰 **Daily NFT Rewards:** ${dailyNftRewards} $CASH`,
+                value: `🖼️ **Collection 1:** ${userData.nfts.collection1Count} NFTs ${userData.nfts.collection1Count > 0 ? `(${NFT_COLLECTION1_DAILY_REWARD} $CASH/day)` : "(0 $CASH/day)"}\n🖼️ **Collection 2:** ${userData.nfts.collection2Count} NFTs ${userData.nfts.collection2Count > 0 ? `(${NFT_COLLECTION2_DAILY_REWARD} $CASH/day)` : "(0 $CASH/day)"}\n💰 **Daily NFT Rewards:** ${dailyNftRewards} $CASH`,
                 inline: false
             });
 
@@ -86,7 +86,7 @@ module.exports = {
             // Activity points section - Mais limpo e organizado
             embed.addFields({
                 name: '📈 Activity Points',
-                value: `🎮 **Games:** ${userData.pointsBySource?.games || 0}\n🎨 **Memes & Art:** ${userData.pointsBySource?.memesAndArt || 0}\n💬 **Chat:** ${userData.pointsBySource?.chatActivity || 0}\n🎁 **Others:** ${userData.pointsBySource?.others || 0}`,
+                value: `🎮 **Games:** ${userData.pointsBySource?.games || 0}\n🎨 **Memes & Art:** ${userData.pointsBySource?.memesAndArt || 0}\n💬 **Chat:** ${userData.pointsBySource?.chatActivity || 0}\n💵 **NFTs:** ${userData.pointsBySource?.nftRewards || 0}\n🎁 **Others:** ${userData.pointsBySource?.others || 0}`,
                 inline: false
             });
 

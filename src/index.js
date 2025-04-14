@@ -243,7 +243,8 @@ client.on('interactionCreate', async interaction => {
  * @param {ButtonInteraction} interaction 
  */
 async function handleUserHelpButton(interaction) {
-    const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD } = require('./utils/constants');
+    const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD, ADDITIONAL_CHAT_CHANNELS, MESSAGE_COOLDOWN_MS } = require('./utils/constants');
+    const cooldownSeconds = MESSAGE_COOLDOWN_MS / 1000;
 
     const userHelpEmbed = new EmbedBuilder()
         .setColor('#3498DB')
@@ -252,13 +253,14 @@ async function handleUserHelpButton(interaction) {
         .addFields(
             {
                 name: '💬 Earning $CASH from Chat',
-                value: 'Send messages in your gang\'s channel to earn 10 $CASH per message. There\'s a 20-second cooldown between rewarded messages.'
+                value: `Send messages in your gang's channel, newbies chat, or general chat to earn 10 $CASH per message. There's a ${cooldownSeconds}-second cooldown between rewarded messages.`
             },
             {
                 name: '🖼️ NFT Rewards',
-                value: `If you own NFTs, you'll earn daily rewards automatically:\n` +
-                    `• Collection 1: ${NFT_COLLECTION1_DAILY_REWARD} $CASH per NFT daily\n` +
-                    `• Collection 2: ${NFT_COLLECTION2_DAILY_REWARD} $CASH per NFT daily\n` +
+                value: `If you own NFTs, you'll earn fixed daily rewards automatically:\n` +
+                    `• Collection 1: ${NFT_COLLECTION1_DAILY_REWARD} $CASH daily (any quantity of NFTs)\n` +
+                    `• Collection 2: ${NFT_COLLECTION2_DAILY_REWARD} $CASH daily (any quantity of NFTs)\n` +
+                    `Maximum daily reward is ${NFT_COLLECTION1_DAILY_REWARD + NFT_COLLECTION2_DAILY_REWARD} $CASH\n` +
                     `Rewards are sent at midnight UTC`
             },
             {
@@ -334,7 +336,7 @@ async function handleModeratorHelpButton(interaction) {
             {
                 name: '🖼️ NFT Management',
                 value: '`/updatenft user:@user collection1:2 collection2:5`\n' +
-                    'Manually update a user\'s NFT holdings if needed\n\n' +
+                    'Manually update a user\'s NFT holdings if needed. Note that users now receive fixed rewards regardless of the quantity of NFTs they hold.\n\n' +
                     '`/syncnfts user:@user`\n' +
                     'Sync NFT holdings from the blockchain for all users or a specific user. This happens automatically daily at 11 PM UTC.'
             },

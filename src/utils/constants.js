@@ -1,6 +1,6 @@
 // Message points settings
 const POINTS_PER_MESSAGE = 10;
-const MESSAGE_COOLDOWN_MS = 20 * 1000; // 20 seconds
+const MESSAGE_COOLDOWN_MS = 30 * 1000; // 30 seconds
 
 // NFT rewards
 const NFT_COLLECTION1_DAILY_REWARD = 500;
@@ -30,6 +30,12 @@ const GANGS = [
     }
 ];
 
+// Additional chat channels that award points
+const ADDITIONAL_CHAT_CHANNELS = [
+    '1353041020018757743', // newbies chat
+    '1353041214890446898'  // general-chat
+];
+
 // Award sources
 const AWARD_SOURCES = ['games', 'memesAndArt', 'chatActivity', 'others'];
 
@@ -39,5 +45,6 @@ module.exports = {
     NFT_COLLECTION1_DAILY_REWARD,
     NFT_COLLECTION2_DAILY_REWARD,
     GANGS,
-    AWARD_SOURCES
+    AWARD_SOURCES,
+    ADDITIONAL_CHAT_CHANNELS
 }; 

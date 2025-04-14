@@ -79,14 +79,15 @@ module.exports = {
                 await user.save();
 
                 // Calculate daily rewards
-                const dailyReward = (user.nfts.collection1Count * NFT_COLLECTION1_DAILY_REWARD) +
-                    (user.nfts.collection2Count * NFT_COLLECTION2_DAILY_REWARD);
+                const collection1Reward = user.nfts.collection1Count > 0 ? NFT_COLLECTION1_DAILY_REWARD : 0;
+                const collection2Reward = user.nfts.collection2Count > 0 ? NFT_COLLECTION2_DAILY_REWARD : 0;
+                const dailyReward = collection1Reward + collection2Reward;
 
                 // Build confirmation message
                 const message = [
                     `NFT holdings updated for ${targetUser.username}:`,
-                    `• Collection 1: ${originalValues.collection1} → ${user.nfts.collection1Count} (${user.nfts.collection1Count * NFT_COLLECTION1_DAILY_REWARD} $CASH/day)`,
-                    `• Collection 2: ${originalValues.collection2} → ${user.nfts.collection2Count} (${user.nfts.collection2Count * NFT_COLLECTION2_DAILY_REWARD} $CASH/day)`,
+                    `• Collection 1: ${originalValues.collection1} → ${user.nfts.collection1Count} ${user.nfts.collection1Count > 0 ? `(${NFT_COLLECTION1_DAILY_REWARD} $CASH/day)` : "(0 $CASH/day)"}`,
+                    `• Collection 2: ${originalValues.collection2} → ${user.nfts.collection2Count} ${user.nfts.collection2Count > 0 ? `(${NFT_COLLECTION2_DAILY_REWARD} $CASH/day)` : "(0 $CASH/day)"}`,
                     ``,
                     `Daily reward: ${dailyReward} $CASH`
                 ].join('\n');

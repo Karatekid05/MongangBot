@@ -1,6 +1,6 @@
 const User = require('../models/User');
 const Gang = require('../models/Gang');
-const { POINTS_PER_MESSAGE, MESSAGE_COOLDOWN_MS, GANGS } = require('./constants');
+const { POINTS_PER_MESSAGE, MESSAGE_COOLDOWN_MS, GANGS, ADDITIONAL_CHAT_CHANNELS } = require('./constants');
 const { client } = require('../index'); // Assuming client is imported from index.js
 
 // Role IDs para membros da equipe que não devem ganhar pontos
@@ -19,9 +19,12 @@ const { isModerator } = require('./permissions');
  */
 async function handleMessagePoints(message) {
     try {
-        // Check if the message is in a gang channel
+        // Check if the message is in a gang channel or additional chat channel
         const gangChannel = GANGS.find(gang => gang.channelId === message.channel.id);
-        if (!gangChannel) return;
+        const isAdditionalChannel = ADDITIONAL_CHAT_CHANNELS.includes(message.channel.id);
+
+        // Se não for nem canal de gang nem canal adicional, ignorar
+        if (!gangChannel && !isAdditionalChannel) return;
 
         // Get user info
         const userId = message.author.id;
@@ -49,53 +52,68 @@ async function handleMessagePoints(message) {
         let user = await User.findOne({ userId });
 
         if (!user) {
-            // Check all gangs to find one the user belongs to
-            let userGang = GANGS.find(gang => member.roles.cache.has(gang.roleId));
+            // Se for um canal adicional e o usuário não existir, tentar encontrar uma gang
+            if (isAdditionalChannel) {
+                // Verificar se o usuário pertence a alguma gang
+                let userGang = GANGS.find(gang => member.roles.cache.has(gang.roleId));
 
-            // If user doesn't belong to any gang, check current channel
-            if (!userGang) {
-                // Automatically assign the gang of the channel where the message was sent
-                userGang = gangChannel;
+                // Se o usuário não pertencer a nenhuma gang, usar a primeira como padrão
+                if (!userGang && GANGS.length > 0) {
+                    userGang = GANGS[0];
 
-                // If possible, add the role to the user (if we have permission)
+                    // Se possível, adicionar o papel ao usuário (se tivermos permissão)
+                    try {
+                        await member.roles.add(userGang.roleId);
+                        console.log(`Role ${userGang.name} added to ${member.user.username}`);
+                    } catch (roleErr) {
+                        console.error(`Could not add role ${userGang.name} to ${member.user.username}:`, roleErr);
+                        // Continue even without being able to add the role
+                    }
+                }
+
+                if (!userGang) return; // Nenhuma gang disponível
+
+                // Criar novo usuário
+                user = createNewUser(userId, message.author.username, userGang.roleId);
+
                 try {
-                    await member.roles.add(userGang.roleId);
-                    console.log(`Role ${userGang.name} added to ${member.user.username}`);
-                } catch (roleErr) {
-                    console.error(`Could not add role ${userGang.name} to ${member.user.username}:`, roleErr);
-                    // Continue even without being able to add the role
+                    await user.save();
+                    console.log(`New user registered from additional channel: ${message.author.username} in gang ${userGang.name}`);
+                } catch (saveError) {
+                    console.error(`Error saving new user ${message.author.username}:`, saveError);
+                    return; // Exit if we can't save the user
                 }
-            }
+            } else {
+                // Check all gangs to find one the user belongs to
+                let userGang = GANGS.find(gang => member.roles.cache.has(gang.roleId));
 
-            if (!userGang) return; // User doesn't belong to any gang
+                // If user doesn't belong to any gang, check current channel
+                if (!userGang) {
+                    // Automatically assign the gang of the channel where the message was sent
+                    userGang = gangChannel;
 
-            // Create new user
-            user = new User({
-                userId,
-                username: message.author.username,
-                gangId: userGang.roleId,
-                cash: 0,
-                weeklyCash: 0,
-                lastMessageReward: new Date(0), // Set initial date in the past
-                nfts: {
-                    collection1Count: 0,
-                    collection2Count: 0
-                },
-                pointsBySource: {
-                    games: 0,
-                    memesAndArt: 0,
-                    chatActivity: 0,
-                    others: 0,
-                    nftRewards: 0
+                    // If possible, add the role to the user (if we have permission)
+                    try {
+                        await member.roles.add(userGang.roleId);
+                        console.log(`Role ${userGang.name} added to ${member.user.username}`);
+                    } catch (roleErr) {
+                        console.error(`Could not add role ${userGang.name} to ${member.user.username}:`, roleErr);
+                        // Continue even without being able to add the role
+                    }
                 }
-            });
 
-            try {
-                await user.save();
-                console.log(`New user registered: ${message.author.username} in gang ${userGang.name}`);
-            } catch (saveError) {
-                console.error(`Error saving new user ${message.author.username}:`, saveError);
-                return; // Exit if we can't save the user
+                if (!userGang) return; // User doesn't belong to any gang
+
+                // Create new user
+                user = createNewUser(userId, message.author.username, userGang.roleId);
+
+                try {
+                    await user.save();
+                    console.log(`New user registered: ${message.author.username} in gang ${userGang.name}`);
+                } catch (saveError) {
+                    console.error(`Error saving new user ${message.author.username}:`, saveError);
+                    return; // Exit if we can't save the user
+                }
             }
         } else {
             // Verificação adicional para usuários existentes
@@ -144,6 +162,35 @@ async function handleMessagePoints(message) {
     } catch (error) {
         console.error('Error handling message points:', error);
     }
+}
+
+/**
+ * Cria um novo usuário com valores padrão
+ * @param {string} userId - ID do usuário
+ * @param {string} username - Nome do usuário
+ * @param {string} gangId - ID da gang
+ * @returns {Object} Novo objeto de usuário
+ */
+function createNewUser(userId, username, gangId) {
+    return new User({
+        userId,
+        username,
+        gangId,
+        cash: 0,
+        weeklyCash: 0,
+        lastMessageReward: new Date(0), // Set initial date in the past
+        nfts: {
+            collection1Count: 0,
+            collection2Count: 0
+        },
+        pointsBySource: {
+            games: 0,
+            memesAndArt: 0,
+            chatActivity: 0,
+            others: 0,
+            nftRewards: 0
+        }
+    });
 }
 
 /**

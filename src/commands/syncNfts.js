@@ -44,13 +44,14 @@ module.exports = {
                 const nftHoldings = await checkUserNfts(user.userId, user.walletAddress);
 
                 if (nftHoldings) {
-                    const dailyReward = (nftHoldings.collection1Count * NFT_COLLECTION1_DAILY_REWARD) +
-                        (nftHoldings.collection2Count * NFT_COLLECTION2_DAILY_REWARD);
+                    const collection1Reward = nftHoldings.collection1Count > 0 ? NFT_COLLECTION1_DAILY_REWARD : 0;
+                    const collection2Reward = nftHoldings.collection2Count > 0 ? NFT_COLLECTION2_DAILY_REWARD : 0;
+                    const dailyReward = collection1Reward + collection2Reward;
 
                     await interaction.editReply(
                         `NFTs updated for ${targetUser.username}:\n` +
-                        `- Collection 1: ${nftHoldings.collection1Count} NFTs (${nftHoldings.collection1Count * NFT_COLLECTION1_DAILY_REWARD} $CASH/day)\n` +
-                        `- Collection 2: ${nftHoldings.collection2Count} NFTs (${nftHoldings.collection2Count * NFT_COLLECTION2_DAILY_REWARD} $CASH/day)\n\n` +
+                        `- Collection 1: ${nftHoldings.collection1Count} NFTs ${nftHoldings.collection1Count > 0 ? `(${NFT_COLLECTION1_DAILY_REWARD} $CASH/day)` : "(0 $CASH/day)"}\n` +
+                        `- Collection 2: ${nftHoldings.collection2Count} NFTs ${nftHoldings.collection2Count > 0 ? `(${NFT_COLLECTION2_DAILY_REWARD} $CASH/day)` : "(0 $CASH/day)"}\n\n` +
                         `Daily reward: ${dailyReward} $CASH`
                     );
                 } else {

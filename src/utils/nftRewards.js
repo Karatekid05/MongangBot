@@ -67,9 +67,11 @@ async function dailyNftRewards(client) {
           // Continue with rewards since we can't verify roles
         }
 
-        // Calcular recompensas baseadas na quantidade de NFTs
-        const collection1Reward = user.nfts.collection1Count * NFT_COLLECTION1_DAILY_REWARD;
-        const collection2Reward = user.nfts.collection2Count * NFT_COLLECTION2_DAILY_REWARD;
+        // Calcular recompensas fixas baseadas na presença de NFTs
+        // Recompensa fixa de 500 $CASH por ter qualquer quantidade de NFTs da coleção 1
+        const collection1Reward = user.nfts.collection1Count > 0 ? NFT_COLLECTION1_DAILY_REWARD : 0;
+        // Recompensa fixa de 100 $CASH por ter qualquer quantidade de NFTs da coleção 2
+        const collection2Reward = user.nfts.collection2Count > 0 ? NFT_COLLECTION2_DAILY_REWARD : 0;
         const dailyReward = collection1Reward + collection2Reward;
 
         if (dailyReward > 0) {
@@ -92,8 +94,8 @@ async function dailyNftRewards(client) {
             const discordUser = await client.users.fetch(user.userId);
             await discordUser.send(
               `Você recebeu ${dailyReward} $CASH como recompensa diária pelos seus NFTs:\n` +
-              `• Coleção 1: ${user.nfts.collection1Count} NFTs (${collection1Reward} $CASH)\n` +
-              `• Coleção 2: ${user.nfts.collection2Count} NFTs (${collection2Reward} $CASH)\n\n` +
+              `• Coleção 1: ${user.nfts.collection1Count > 0 ? `${NFT_COLLECTION1_DAILY_REWARD} $CASH` : "0 $CASH"}\n` +
+              `• Coleção 2: ${user.nfts.collection2Count > 0 ? `${NFT_COLLECTION2_DAILY_REWARD} $CASH` : "0 $CASH"}\n\n` +
               `Seu saldo atual: ${user.cash} $CASH`
             );
           } catch (dmError) {

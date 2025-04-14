@@ -155,8 +155,8 @@ async function verifyTransaction(userId, client) {
                 const updatedUser = await User.findOne({ userId });
 
                 // Calcular recompensas diárias
-                const collection1Reward = updatedUser.nfts.collection1Count * NFT_COLLECTION1_DAILY_REWARD;
-                const collection2Reward = updatedUser.nfts.collection2Count * NFT_COLLECTION2_DAILY_REWARD;
+                const collection1Reward = updatedUser.nfts.collection1Count > 0 ? NFT_COLLECTION1_DAILY_REWARD : 0;
+                const collection2Reward = updatedUser.nfts.collection2Count > 0 ? NFT_COLLECTION2_DAILY_REWARD : 0;
                 const totalDailyReward = collection1Reward + collection2Reward;
 
                 // Notificar o usuário
@@ -164,8 +164,8 @@ async function verifyTransaction(userId, client) {
                     `✅ **Wallet Verification Successful!**\n\n` +
                     `Your wallet \`${verification.walletAddress}\` has been verified and linked to your Discord account.\n\n` +
                     `**NFTs Found:**\n` +
-                    `• Collection 1: ${updatedUser.nfts.collection1Count} NFTs (${collection1Reward} $CASH/day)\n` +
-                    `• Collection 2: ${updatedUser.nfts.collection2Count} NFTs (${collection2Reward} $CASH/day)\n\n` +
+                    `• Collection 1: ${updatedUser.nfts.collection1Count} NFTs ${updatedUser.nfts.collection1Count > 0 ? `(${NFT_COLLECTION1_DAILY_REWARD} $CASH/day)` : "(0 $CASH/day)"}\n` +
+                    `• Collection 2: ${updatedUser.nfts.collection2Count} NFTs ${updatedUser.nfts.collection2Count > 0 ? `(${NFT_COLLECTION2_DAILY_REWARD} $CASH/day)` : "(0 $CASH/day)"}\n\n` +
                     `**Total Daily Reward:** ${totalDailyReward} $CASH\n\n` +
                     `You will now automatically receive these rewards every day!`
                 );
