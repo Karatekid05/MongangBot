@@ -3,11 +3,7 @@ const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD } = require('
 const { isModerator } = require('./permissions');
 
 // Role IDs para membros da equipe que não devem ganhar recompensas
-// Deve ser idêntico ao definido em pointsManager.js e permissions.js
-const TEAM_ROLE_IDS = [
-  '1339293248308641883', // Founders
-  '1338993206112817283'  // Moderators
-];
+const FOUNDER_ROLE_ID = '1339293248308641883'; // Apenas Founders não recebem recompensas
 
 /**
  * Calculates and distributes daily rewards for NFT holders
@@ -46,24 +42,20 @@ async function dailyNftRewards(client) {
 
     for (const user of users) {
       try {
-        // Check if the user is a team member (Founder or Moderator)
-        let isTeamMember = false;
-        let isModeratorCheck = false;
+        // Check if the user is a founder
+        let isFounder = false;
 
         try {
           const member = await guild.members.fetch(user.userId);
+          isFounder = member.roles.cache.has(FOUNDER_ROLE_ID);
 
-          // Use both verification methods to ensure consistency
-          isTeamMember = TEAM_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
-          isModeratorCheck = isModerator(member);
-
-          if (isTeamMember || isModeratorCheck) {
-            console.log(`User ${user.username} is a team member and won't earn NFT rewards. Role check: ${isTeamMember}, Mod check: ${isModeratorCheck}`);
+          if (isFounder) {
+            console.log(`User ${user.username} is a founder and won't earn NFT rewards.`);
             results.skipped++;
             continue; // Skip to next user
           }
         } catch (memberError) {
-          console.warn(`Could not check team roles for ${user.username}: ${memberError.message}`);
+          console.warn(`Could not check roles for ${user.username}: ${memberError.message}`);
           // Continue with rewards since we can't verify roles
         }
 
@@ -108,7 +100,7 @@ async function dailyNftRewards(client) {
       }
     }
 
-    console.log(`NFT rewards distributed: ${results.success} users, ${results.skipped} skipped (team members), ${results.rewards} $CASH total`);
+    console.log(`NFT rewards distributed: ${results.success} users, ${results.skipped} skipped (founders), ${results.rewards} $CASH total`);
     return results;
   } catch (error) {
     console.error('Error distributing NFT rewards:', error);
