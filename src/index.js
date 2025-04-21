@@ -104,6 +104,20 @@ client.once('ready', async () => {
 
         console.log('Weekly reset completed');
     });
+
+    // Schedule leaderboard export to Google Sheets every Sunday at 11 PM UTC
+    cron.schedule('0 23 * * 0', async () => {
+        console.log('Running scheduled leaderboard export to Google Sheets');
+
+        // Export total leaderboards
+        const success = await exportLeaderboards(false);
+
+        if (success) {
+            console.log('Successfully exported total leaderboards to Google Sheets');
+        } else {
+            console.error('Failed to export total leaderboards to Google Sheets');
+        }
+    });
 });
 
 // Update username when it changes

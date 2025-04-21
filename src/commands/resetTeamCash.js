@@ -6,8 +6,7 @@ const { updateGangTotals } = require('../utils/pointsManager');
 
 // Role IDs para membros da equipe que não devem ganhar pontos
 const TEAM_ROLE_IDS = [
-    '1339293248308641883', // Founders
-    '1338993206112817283'  // Moderators
+    '1339293248308641883'  // Founders
 ];
 
 module.exports = {
