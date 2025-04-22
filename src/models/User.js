@@ -64,8 +64,31 @@ const userSchema = new mongoose.Schema({
             default: 0
         }
     },
-    // Track points awarded by source
+    // Track total points awarded by source
     pointsBySource: {
+        games: {
+            type: Number,
+            default: 0
+        },
+        memesAndArt: {
+            type: Number,
+            default: 0
+        },
+        chatActivity: {
+            type: Number,
+            default: 0
+        },
+        others: {
+            type: Number,
+            default: 0
+        },
+        nftRewards: {
+            type: Number,
+            default: 0
+        }
+    },
+    // Track weekly points by source
+    weeklyPointsBySource: {
         games: {
             type: Number,
             default: 0

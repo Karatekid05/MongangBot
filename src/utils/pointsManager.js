@@ -139,9 +139,12 @@ async function handleMessagePoints(message) {
 
         // Award points
         user.cash += POINTS_PER_MESSAGE;
-        user.weeklyCash += POINTS_PER_MESSAGE;
         user.pointsBySource.chatActivity += POINTS_PER_MESSAGE;
+        user.weeklyPointsBySource.chatActivity += POINTS_PER_MESSAGE;
         user.lastMessageReward = now;
+
+        // Update weekly cash to reflect all sources
+        await updateWeeklyCash(user.userId);
 
         // Save user
         try {
@@ -189,8 +192,66 @@ function createNewUser(userId, username, gangId) {
             chatActivity: 0,
             others: 0,
             nftRewards: 0
+        },
+        weeklyPointsBySource: {
+            games: 0,
+            memesAndArt: 0,
+            chatActivity: 0,
+            others: 0,
+            nftRewards: 0
         }
     });
+}
+
+/**
+ * Reset weekly stats
+ */
+async function resetWeeklyStats() {
+    try {
+        // Reset user weekly stats
+        await User.updateMany({}, {
+            weeklyCash: 0,
+            'weeklyPointsBySource.games': 0,
+            'weeklyPointsBySource.memesAndArt': 0,
+            'weeklyPointsBySource.chatActivity': 0,
+            'weeklyPointsBySource.others': 0,
+            'weeklyPointsBySource.nftRewards': 0
+        });
+
+        // Reset gang weekly stats
+        await Gang.updateMany({}, { weeklyTotalCash: 0 });
+
+        return true;
+    } catch (error) {
+        console.error('Error resetting weekly stats:', error);
+        return false;
+    }
+}
+
+/**
+ * Update weekly cash based on all sources
+ * @param {string} userId - Discord user ID
+ */
+async function updateWeeklyCash(userId) {
+    try {
+        const user = await User.findOne({ userId });
+        if (!user) return false;
+
+        // Calculate total from all weekly sources
+        const totalWeeklyCash = Object.values(user.weeklyPointsBySource).reduce((sum, val) => sum + (val || 0), 0);
+
+        // Update weekly cash
+        user.weeklyCash = totalWeeklyCash;
+        await user.save();
+
+        // Update gang totals
+        await updateGangTotals(user.gangId);
+
+        return true;
+    } catch (error) {
+        console.error('Error updating weekly cash:', error);
+        return false;
+    }
 }
 
 /**
@@ -207,19 +268,23 @@ async function awardCash(userId, source, amount) {
 
         // Award points
         user.cash += amount;
-        user.weeklyCash += amount;
 
-        // Track the source
+        // Track the source for both total and weekly
         if (source && user.pointsBySource[source] !== undefined) {
             user.pointsBySource[source] += amount;
+            user.weeklyPointsBySource[source] += amount;
         } else {
             user.pointsBySource.others += amount;
+            user.weeklyPointsBySource.others += amount;
         }
+
+        // Update weekly cash based on all sources
+        await updateWeeklyCash(userId);
 
         // Save user
         await user.save();
 
-        // Update gang totals for current gang only
+        // Update gang totals
         await updateGangTotals(user.gangId);
 
         return true;
@@ -357,22 +422,6 @@ async function updateGangTotals(gangId) {
     } catch (error) {
         console.error('Error updating gang totals:', error);
         return null;
-    }
-}
-
-// Reset weekly stats
-async function resetWeeklyStats() {
-    try {
-        // Reset user weekly stats
-        await User.updateMany({}, { weeklyCash: 0 });
-
-        // Reset gang weekly stats
-        await Gang.updateMany({}, { weeklyTotalCash: 0 });
-
-        return true;
-    } catch (error) {
-        console.error('Error resetting weekly stats:', error);
-        return false;
     }
 }
 

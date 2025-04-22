@@ -79,17 +79,12 @@ client.once('ready', async () => {
     // Initialize users based on roles after the bot is ready
     await initializeUsers(client);
 
-    // Sync NFTs every day at 11 PM
+    // Sync NFTs and distribute rewards every day at 11 PM
     cron.schedule('0 23 * * *', async () => {
-        console.log('Starting daily NFT synchronization...');
+        console.log('Starting daily NFT synchronization and rewards...');
         await checkAllUsersNfts();
-        console.log('NFT synchronization completed');
-    });
-
-    // Schedule daily NFT rewards at midnight
-    cron.schedule('0 0 * * *', () => {
-        console.log('Running daily NFT rewards task');
-        dailyNftRewards(client);
+        await dailyNftRewards(client);
+        console.log('NFT synchronization and rewards completed');
     });
 
     // Schedule weekly reset and export on Sundays at midnight
