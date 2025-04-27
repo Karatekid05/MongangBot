@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { removeCash } = require('../utils/pointsManager');
 const { isModerator } = require('../utils/permissions');
+const { AWARD_SOURCES } = require('../utils/constants');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,6 +16,18 @@ module.exports = {
         .setDescription('Amount of $CASH to remove')
         .setRequired(true)
         .setMinValue(1))
+    .addStringOption(option =>
+      option.setName('source')
+        .setDescription('Source to remove points from')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Games', value: 'games' },
+          { name: 'Memes & Art', value: 'memesAndArt' },
+          { name: 'Chat Activity', value: 'chatActivity' },
+          { name: 'NFT Rewards', value: 'nftRewards' },
+          { name: 'Others', value: 'others' },
+          { name: 'Proportional (All Sources)', value: 'proportional' }
+        ))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
 
   async execute(interaction) {
@@ -28,6 +41,7 @@ module.exports = {
 
     const targetUser = interaction.options.getUser('user');
     const amount = interaction.options.getInteger('amount');
+    const source = interaction.options.getString('source');
 
     // Validate inputs
     if (amount <= 0) {
@@ -40,12 +54,13 @@ module.exports = {
     // Defer reply to handle potentially slow database operations
     await interaction.deferReply();
 
-    // Remove the cash
-    const result = await removeCash(targetUser.id, amount);
+    // Remove the cash (use null as source for proportional removal)
+    const result = await removeCash(targetUser.id, amount, source === 'proportional' ? null : source);
 
     if (result.success) {
       const actualAmount = result.amountRemoved || amount;
-      await interaction.editReply(`Successfully removed ${actualAmount} $CASH from ${targetUser.username}`);
+      const sourceText = source === 'proportional' ? 'proportionally from all sources' : `from source: ${source}`;
+      await interaction.editReply(`Successfully removed ${actualAmount} $CASH from ${targetUser.username} ${sourceText}`);
     } else {
       await interaction.editReply('Failed to remove $CASH. The user may not be registered in the system.');
     }

@@ -237,8 +237,27 @@ async function updateWeeklyCash(userId) {
         const user = await User.findOne({ userId });
         if (!user) return false;
 
+        if (!user.weeklyPointsBySource) {
+            console.error(`User ${user.username} missing weeklyPointsBySource object`);
+            // Initialize if missing
+            user.weeklyPointsBySource = {
+                games: 0,
+                memesAndArt: 0,
+                chatActivity: 0,
+                others: 0,
+                nftRewards: 0
+            };
+        }
+
         // Calculate total from all weekly sources
-        const totalWeeklyCash = Object.values(user.weeklyPointsBySource).reduce((sum, val) => sum + (val || 0), 0);
+        const totalWeeklyCash =
+            (user.weeklyPointsBySource.games || 0) +
+            (user.weeklyPointsBySource.memesAndArt || 0) +
+            (user.weeklyPointsBySource.chatActivity || 0) +
+            (user.weeklyPointsBySource.others || 0) +
+            (user.weeklyPointsBySource.nftRewards || 0);
+
+        console.log(`Updating weekly cash for ${user.username}: ${totalWeeklyCash} (games: ${user.weeklyPointsBySource.games || 0}, memes: ${user.weeklyPointsBySource.memesAndArt || 0}, chat: ${user.weeklyPointsBySource.chatActivity || 0}, others: ${user.weeklyPointsBySource.others || 0}, nft: ${user.weeklyPointsBySource.nftRewards || 0})`);
 
         // Update weekly cash
         user.weeklyCash = totalWeeklyCash;
@@ -266,20 +285,19 @@ async function awardCash(userId, source, amount) {
         const user = await User.findOne({ userId });
         if (!user) return false;
 
-        // Award points
+        // Award points to total cash
         user.cash += amount;
+        user.weeklyCash += amount;
 
         // Track the source for both total and weekly
         if (source && user.pointsBySource[source] !== undefined) {
             user.pointsBySource[source] += amount;
             user.weeklyPointsBySource[source] += amount;
         } else {
+            // If source is not specified or invalid, use 'others'
             user.pointsBySource.others += amount;
             user.weeklyPointsBySource.others += amount;
         }
-
-        // Update weekly cash based on all sources
-        await updateWeeklyCash(userId);
 
         // Save user
         await user.save();
@@ -298,12 +316,24 @@ async function awardCash(userId, source, amount) {
  * Remove cash from a user
  * @param {string} userId - Discord user ID
  * @param {number} amount - Amount to remove
+ * @param {string} source - Source to remove points from (games, memesAndArt, chatActivity, others, nftRewards)
  */
-async function removeCash(userId, amount) {
+async function removeCash(userId, amount, source = 'others') {
     try {
         // Find user
         const user = await User.findOne({ userId });
-        if (!user) return false;
+        if (!user) return { success: false, message: 'User not found in the system' };
+
+        // Verificar se o source é 'proportional' (quando null é passado para esta função)
+        const isProportional = !source || source === 'proportional';
+
+        // Se não for proporcional, verificar se há pontos suficientes na fonte especificada
+        if (!isProportional && user.pointsBySource[source] < amount) {
+            return {
+                success: false,
+                message: `Not enough points in source '${source}'. Available: ${user.pointsBySource[source]}, Requested: ${amount}`
+            };
+        }
 
         // Remove points (don't go below 0)
         const prevCash = user.cash;
@@ -313,6 +343,90 @@ async function removeCash(userId, amount) {
         // Calculate actual amount removed (in case user had less than amount)
         const actualAmountRemoved = prevCash - user.cash;
 
+        // Also remove from point sources (proporcional ou específico)
+        if (!isProportional && user.pointsBySource[source] !== undefined) {
+            // Remove from specific source
+            user.pointsBySource[source] = Math.max(0, user.pointsBySource[source] - actualAmountRemoved);
+            user.weeklyPointsBySource[source] = Math.max(0, user.weeklyPointsBySource[source] - actualAmountRemoved);
+        } else {
+            // Distribute removal proportionally across sources
+            const sources = Object.keys(user.pointsBySource);
+
+            // Calculate total points from all sources for proportional distribution
+            const totalPoints = Object.values(user.pointsBySource).reduce((sum, val) => sum + val, 0);
+
+            if (totalPoints === 0) {
+                return {
+                    success: false,
+                    message: `User has 0 points in all sources. Cannot remove points proportionally.`
+                };
+            }
+
+            // Primeira passagem: distribuição proporcional e cálculo dos valores exatos
+            let amountsToRemove = {};
+            let totalToRemove = 0;
+
+            for (const src of sources) {
+                if (user.pointsBySource[src] > 0) {
+                    // Calculate proportion of points to remove from this source
+                    const proportion = user.pointsBySource[src] / totalPoints;
+                    // Use valores exatos (sem arredondamento ainda)
+                    const exactAmount = actualAmountRemoved * proportion;
+
+                    // Armazenar para processamento posterior
+                    amountsToRemove[src] = exactAmount;
+                    totalToRemove += exactAmount;
+                }
+            }
+
+            // Segunda passagem: ajuste e remoção real
+            let remainingToRemove = actualAmountRemoved;
+
+            for (const src of sources) {
+                if (user.pointsBySource[src] > 0 && amountsToRemove[src] > 0) {
+                    // Calcular o valor ajustado (com possível arredondamento)
+                    // para garantir que o total removido seja exatamente igual ao montante
+                    const adjustedAmount = src === sources[sources.length - 1]
+                        ? remainingToRemove  // último source pega o resto
+                        : Math.min(
+                            user.pointsBySource[src],
+                            Math.floor(amountsToRemove[src])
+                        );
+
+                    // Não permitir valores negativos
+                    const finalAmount = Math.max(0, Math.min(adjustedAmount, user.pointsBySource[src]));
+
+                    // Remover do source
+                    user.pointsBySource[src] -= finalAmount;
+                    remainingToRemove -= finalAmount;
+
+                    // Atualizar também o semanal
+                    if (user.weeklyPointsBySource[src] > 0) {
+                        const weeklyAmount = Math.min(user.weeklyPointsBySource[src], finalAmount);
+                        user.weeklyPointsBySource[src] -= weeklyAmount;
+                    }
+                }
+            }
+
+            // Tratamento para eventuais pontos que restaram devido a arredondamentos
+            if (remainingToRemove > 0) {
+                for (const src of sources) {
+                    if (user.pointsBySource[src] > 0) {
+                        const finalAmount = Math.min(user.pointsBySource[src], remainingToRemove);
+                        user.pointsBySource[src] -= finalAmount;
+                        remainingToRemove -= finalAmount;
+
+                        if (user.weeklyPointsBySource[src] > 0) {
+                            const weeklyAmount = Math.min(user.weeklyPointsBySource[src], finalAmount);
+                            user.weeklyPointsBySource[src] -= weeklyAmount;
+                        }
+
+                        if (remainingToRemove <= 0) break;
+                    }
+                }
+            }
+        }
+
         // Save user
         await user.save();
 
@@ -320,10 +434,14 @@ async function removeCash(userId, amount) {
         // Cash contributed to previous gangs remains untouched
         await updateGangTotals(user.gangId);
 
-        return { success: true, amountRemoved: actualAmountRemoved };
+        return {
+            success: true,
+            amountRemoved: actualAmountRemoved,
+            message: `Successfully removed ${actualAmountRemoved} $CASH from user.`
+        };
     } catch (error) {
         console.error('Error removing cash:', error);
-        return { success: false, amountRemoved: 0 };
+        return { success: false, amountRemoved: 0, message: 'Error removing cash. Please try again later.' };
     }
 }
 
@@ -427,51 +545,182 @@ async function updateGangTotals(gangId) {
 
 /**
  * Transfer cash from one user to another
- * @param {string} fromUserId - Discord user ID of the sender
- * @param {string} toUserId - Discord user ID of the recipient
+ * @param {string} fromUserId - Discord user ID to transfer from
+ * @param {string} toUserId - Discord user ID to transfer to
  * @param {number} amount - Amount to transfer
- * @returns {Object} Result with success status and message
+ * @param {string} source - Source to transfer points from (games, memesAndArt, chatActivity, others, nftRewards) or 'proportional'
  */
-async function transferCash(fromUserId, toUserId, amount) {
+async function transferCash(fromUserId, toUserId, amount, source = 'others') {
     try {
-        // Find both users
-        const fromUser = await User.findOne({ userId: fromUserId });
-        const toUser = await User.findOne({ userId: toUserId });
+        // Check for self-transfer
+        if (fromUserId === toUserId) {
+            return { success: false, message: 'Cannot transfer to yourself' };
+        }
 
-        // Check if both users exist
-        if (!fromUser || !toUser) {
+        // Find sender
+        const sender = await User.findOne({ userId: fromUserId });
+        if (!sender) return { success: false, message: 'Sender not found in the system' };
+
+        // Make sure sender has enough cash
+        if (sender.cash < amount) {
+            return { success: false, message: `Not enough $CASH. Available: ${sender.cash}, Requested: ${amount}` };
+        }
+
+        // Verificar se o source é 'proportional'
+        const isProportional = !source || source === 'proportional';
+
+        // Se não for proporcional, verificar se há pontos suficientes na fonte especificada
+        if (!isProportional && sender.pointsBySource[source] < amount) {
             return {
                 success: false,
-                message: !fromUser
-                    ? 'Sender is not registered in the system'
-                    : 'Recipient is not registered in the system'
+                message: `Not enough points in source '${source}'. Available: ${sender.pointsBySource[source]}, Requested: ${amount}`
             };
         }
 
-        // Check if sender has enough cash
-        if (fromUser.cash < amount) {
-            return {
-                success: false,
-                message: `You don't have enough cash. Your balance: ${fromUser.cash} $CASH`
-            };
+        // Find or create recipient
+        let recipient = await User.findOne({ userId: toUserId });
+        if (!recipient) {
+            // Create new user
+            recipient = new User({
+                userId: toUserId,
+                username: 'Unknown',
+                cash: 0,
+                weeklyCash: 0,
+                // Initialize pointsBySource with zeros
+                pointsBySource: {
+                    games: 0,
+                    memesAndArt: 0,
+                    chatActivity: 0,
+                    others: 0,
+                    nftRewards: 0,
+                },
+                weeklyPointsBySource: {
+                    games: 0,
+                    memesAndArt: 0,
+                    chatActivity: 0,
+                    others: 0,
+                    nftRewards: 0,
+                }
+            });
         }
 
-        // Perform the transfer
-        fromUser.cash -= amount;
-        toUser.cash += amount;
+        // Armazenar o source original para adicionar no destinatário
+        const targetSource = source && source !== 'proportional' ? source : 'others';
+
+        // Remove from sender - always remove the full amount from total cash
+        sender.cash -= amount;
+        sender.weeklyCash = Math.max(0, sender.weeklyCash - amount);
+
+        // Remove from sender's point sources (proporcional ou específico)
+        if (!isProportional && sender.pointsBySource[source] !== undefined) {
+            // Remove from specific source
+            sender.pointsBySource[source] -= amount;
+            if (sender.weeklyPointsBySource[source] > 0) {
+                const weeklyAmount = Math.min(sender.weeklyPointsBySource[source], amount);
+                sender.weeklyPointsBySource[source] -= weeklyAmount;
+            }
+        } else {
+            // Distribute removal proportionally across sources
+            const sources = Object.keys(sender.pointsBySource);
+
+            // Calculate total points from all sources for proportional distribution
+            const totalPoints = Object.values(sender.pointsBySource).reduce((sum, val) => sum + val, 0);
+
+            if (totalPoints === 0) {
+                return {
+                    success: false,
+                    message: `Sender has 0 points in all sources. Cannot transfer points proportionally.`
+                };
+            }
+
+            // Primeira passagem: distribuição proporcional e cálculo dos valores exatos
+            let amountsToRemove = {};
+            let totalToRemove = 0;
+
+            for (const src of sources) {
+                if (sender.pointsBySource[src] > 0) {
+                    // Calculate proportion of points to remove from this source
+                    const proportion = sender.pointsBySource[src] / totalPoints;
+                    // Use valores exatos (sem arredondamento ainda)
+                    const exactAmount = amount * proportion;
+
+                    // Armazenar para processamento posterior
+                    amountsToRemove[src] = exactAmount;
+                    totalToRemove += exactAmount;
+                }
+            }
+
+            // Segunda passagem: ajuste e remoção real
+            let remainingToRemove = amount;
+
+            for (const src of sources) {
+                if (sender.pointsBySource[src] > 0 && amountsToRemove[src] > 0) {
+                    // Calcular o valor ajustado (com possível arredondamento)
+                    // para garantir que o total removido seja exatamente igual ao montante
+                    const adjustedAmount = src === sources[sources.length - 1]
+                        ? remainingToRemove  // último source pega o resto
+                        : Math.min(
+                            sender.pointsBySource[src],
+                            Math.floor(amountsToRemove[src])
+                        );
+
+                    // Não permitir valores negativos
+                    const finalAmount = Math.max(0, Math.min(adjustedAmount, sender.pointsBySource[src]));
+
+                    // Remover do source
+                    sender.pointsBySource[src] -= finalAmount;
+                    remainingToRemove -= finalAmount;
+
+                    // Atualizar também o semanal
+                    if (sender.weeklyPointsBySource[src] > 0) {
+                        const weeklyAmount = Math.min(sender.weeklyPointsBySource[src], finalAmount);
+                        sender.weeklyPointsBySource[src] -= weeklyAmount;
+                    }
+                }
+            }
+
+            // Tratamento para eventuais pontos que restaram devido a arredondamentos
+            if (remainingToRemove > 0) {
+                for (const src of sources) {
+                    if (sender.pointsBySource[src] > 0) {
+                        const finalAmount = Math.min(sender.pointsBySource[src], remainingToRemove);
+                        sender.pointsBySource[src] -= finalAmount;
+                        remainingToRemove -= finalAmount;
+
+                        if (sender.weeklyPointsBySource[src] > 0) {
+                            const weeklyAmount = Math.min(sender.weeklyPointsBySource[src], finalAmount);
+                            sender.weeklyPointsBySource[src] -= weeklyAmount;
+                        }
+
+                        if (remainingToRemove <= 0) break;
+                    }
+                }
+            }
+        }
+
+        // Add to recipient
+        recipient.cash += amount;
+        recipient.weeklyCash += amount;
+
+        // Add to recipient's point sources
+        recipient.pointsBySource[targetSource] += amount;
+        recipient.weeklyPointsBySource[targetSource] += amount;
 
         // Save both users
-        await fromUser.save();
-        await toUser.save();
+        await Promise.all([sender.save(), recipient.save()]);
 
-        // Update gang totals for both users' current gangs only
-        // Histórico de contribuições para gangs anteriores permanece intacto
-        await updateGangTotals(fromUser.gangId);
-        await updateGangTotals(toUser.gangId);
+        // Update gang totals for both users
+        await Promise.all([
+            updateGangTotals(sender.gangId),
+            updateGangTotals(recipient.gangId)
+        ]);
+
+        // Incluir informação sobre o saldo atual do remetente
+        const senderNewBalance = sender.cash;
 
         return {
             success: true,
-            message: `Successfully transferred ${amount} $CASH to the user. Your new balance: ${fromUser.cash} $CASH`
+            message: `Successfully transferred ${amount} $CASH from <@${fromUserId}> to <@${toUserId}>. Your new balance: ${senderNewBalance}`
         };
     } catch (error) {
         console.error('Error transferring cash:', error);

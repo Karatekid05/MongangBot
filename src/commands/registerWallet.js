@@ -164,8 +164,8 @@ async function verifyTransaction(userId, client) {
                     `✅ **Wallet Verification Successful!**\n\n` +
                     `Your wallet \`${verification.walletAddress}\` has been verified and linked to your Discord account.\n\n` +
                     `**NFTs Found:**\n` +
-                    `• Collection 1: ${updatedUser.nfts.collection1Count} NFTs ${updatedUser.nfts.collection1Count > 0 ? `(${NFT_COLLECTION1_DAILY_REWARD} $CASH/day)` : "(0 $CASH/day)"}\n` +
-                    `• Collection 2: ${updatedUser.nfts.collection2Count} NFTs ${updatedUser.nfts.collection2Count > 0 ? `(${NFT_COLLECTION2_DAILY_REWARD} $CASH/day)` : "(0 $CASH/day)"}\n\n` +
+                    `• Collection 1: ${updatedUser.nfts.collection1Count} NFTs (${updatedUser.nfts.collection1Count > 0 ? `${NFT_COLLECTION1_DAILY_REWARD}` : "0"} $CASH/day)\n` +
+                    `• Collection 2: ${updatedUser.nfts.collection2Count} NFTs (${updatedUser.nfts.collection2Count > 0 ? `${NFT_COLLECTION2_DAILY_REWARD}` : "0"} $CASH/day)\n\n` +
                     `**Total Daily Reward:** ${totalDailyReward} $CASH\n\n` +
                     `You will now automatically receive these rewards every day!`
                 );

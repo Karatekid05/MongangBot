@@ -2,9 +2,9 @@
 const POINTS_PER_MESSAGE = 10;
 const MESSAGE_COOLDOWN_MS = 30 * 1000; // 30 seconds
 
-// NFT Reward Constants
-const DAILY_REWARD_COLLECTION1 = 500; // Daily reward per NFT from Collection 1
-const DAILY_REWARD_COLLECTION2 = 100; // Daily reward per NFT from Collection 2
+// NFT rewards - valores fixos independentemente da quantidade de NFTs
+const NFT_COLLECTION1_DAILY_REWARD = 500; // 500 $CASH/dia para Collection 1
+const NFT_COLLECTION2_DAILY_REWARD = 100; // 100 $CASH/dia para Collection 2
 
 // Gang data
 const GANGS = [
@@ -42,8 +42,8 @@ const AWARD_SOURCES = ['games', 'memesAndArt', 'chatActivity', 'others'];
 module.exports = {
     POINTS_PER_MESSAGE,
     MESSAGE_COOLDOWN_MS,
-    DAILY_REWARD_COLLECTION1,
-    DAILY_REWARD_COLLECTION2,
+    NFT_COLLECTION1_DAILY_REWARD,
+    NFT_COLLECTION2_DAILY_REWARD,
     GANGS,
     AWARD_SOURCES,
     ADDITIONAL_CHAT_CHANNELS

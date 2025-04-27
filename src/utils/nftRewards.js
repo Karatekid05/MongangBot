@@ -1,7 +1,7 @@
 const User = require('../models/User');
-const { DAILY_REWARD_COLLECTION1, DAILY_REWARD_COLLECTION2 } = require('./constants');
+const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD } = require('./constants');
 const { isModerator } = require('./permissions');
-const { updateWeeklyCash } = require('./pointsManager');
+const { updateWeeklyCash, updateGangTotals } = require('./pointsManager');
 
 // Role IDs para membros da equipe que não devem ganhar recompensas
 const FOUNDER_ROLE_ID = '1339293248308641883'; // Apenas Founders não recebem recompensas
@@ -13,6 +13,7 @@ const FOUNDER_ROLE_ID = '1339293248308641883'; // Apenas Founders não recebem r
 async function dailyNftRewards(client) {
   try {
     console.log('Starting daily NFT rewards distribution...');
+    console.log(`Using reward values: Collection 1: ${NFT_COLLECTION1_DAILY_REWARD}, Collection 2: ${NFT_COLLECTION2_DAILY_REWARD}`);
 
     // Get all users with NFTs, properly accessing the nfts object
     const users = await User.find({
@@ -24,11 +25,22 @@ async function dailyNftRewards(client) {
 
     console.log(`Found ${users.length} users with NFTs`);
 
+    // Obter a data atual
+    const now = new Date();
+    // Definir a data como meia-noite do dia atual
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+
     for (const user of users) {
       try {
         // Skip if user is a founder
         if (user.roles && user.roles.includes('founders')) {
-          console.log(`Skipping rewards for founder: ${user.discordId}`);
+          console.log(`Skipping rewards for founder: ${user.username}`);
+          continue;
+        }
+
+        // Verificar se o usuário já recebeu recompensas hoje
+        if (user.lastNftReward && user.lastNftReward >= today) {
+          console.log(`User ${user.username} already received NFT rewards today at ${user.lastNftReward.toISOString()}`);
           continue;
         }
 
@@ -41,56 +53,66 @@ async function dailyNftRewards(client) {
 
         // Calculate Collection 1 rewards
         if (collection1Count > 0) {
-          const collection1Reward = DAILY_REWARD_COLLECTION1;  // Fixed reward regardless of count
+          const collection1Reward = NFT_COLLECTION1_DAILY_REWARD;  // Fixed reward regardless of count
           totalReward += collection1Reward;
-          rewardBreakdown.push(`Collection 1: ${collection1Count} NFT(s) = ${collection1Reward} CASH`);
+          rewardBreakdown.push(`Collection 1: ${collection1Count} NFT(s) = ${collection1Reward} $CASH`);
         }
 
         // Calculate Collection 2 rewards
         if (collection2Count > 0) {
-          const collection2Reward = DAILY_REWARD_COLLECTION2;  // Fixed reward regardless of count
+          const collection2Reward = NFT_COLLECTION2_DAILY_REWARD;  // Fixed reward regardless of count
           totalReward += collection2Reward;
-          rewardBreakdown.push(`Collection 2: ${collection2Count} NFT(s) = ${collection2Reward} CASH`);
+          rewardBreakdown.push(`Collection 2: ${collection2Count} NFT(s) = ${collection2Reward} $CASH`);
         }
 
         if (totalReward > 0) {
-          // Update user's cash balance and NFT rewards using atomic operation
-          const updatedUser = await User.findOneAndUpdate(
-            { discordId: user.discordId },
-            {
-              $inc: {
-                cash: totalReward,
-                'pointsBySource.nftRewards': totalReward,
-                'weeklyPointsBySource.nftRewards': totalReward
-              },
-              $set: { lastNftReward: new Date() }
-            },
-            { new: true }
-          );
+          console.log(`Processing rewards for ${user.username}: ${totalReward} $CASH`);
 
-          if (!updatedUser) {
-            console.log(`User ${user.discordId} not found during reward update`);
-            continue;
+          // Initialize weekly points if missing
+          if (!user.weeklyPointsBySource) {
+            user.weeklyPointsBySource = {
+              games: 0,
+              memesAndArt: 0,
+              chatActivity: 0,
+              others: 0,
+              nftRewards: 0
+            };
           }
 
-          // Update weekly cash to reflect all sources
-          await updateWeeklyCash(user.discordId);
+          // Update user's cash balance and NFT rewards
+          user.cash += totalReward;
+          user.pointsBySource.nftRewards += totalReward;
+          user.weeklyPointsBySource.nftRewards += totalReward;
+          user.weeklyCash =
+            (user.weeklyPointsBySource.games || 0) +
+            (user.weeklyPointsBySource.memesAndArt || 0) +
+            (user.weeklyPointsBySource.chatActivity || 0) +
+            (user.weeklyPointsBySource.others || 0) +
+            (user.weeklyPointsBySource.nftRewards || 0);
+          user.lastNftReward = now;
+
+          // Save changes
+          await user.save();
+
+          // Update gang totals
+          await updateGangTotals(user.gangId);
 
           // Send reward notification
-          const member = await client.guilds.cache.first().members.fetch(user.discordId);
-          if (member) {
-            const rewardMessage = `🎉 Daily NFT Rewards\n\n${rewardBreakdown.join('\n')}\nTotal: ${totalReward} CASH`;
-            try {
+          try {
+            const member = await client.guilds.cache.first().members.fetch(user.userId);
+            if (member) {
+              const rewardMessage = `🎉 Daily NFT Rewards\n\n${rewardBreakdown.join('\n')}\nTotal: ${totalReward} $CASH\n\nRewards are distributed daily at 11 PM UTC`;
               await member.send(rewardMessage);
-            } catch (dmError) {
-              console.log(`Could not DM user ${user.discordId}: ${dmError.message}`);
+              console.log(`Reward notification sent to ${user.username}`);
             }
+          } catch (dmError) {
+            console.log(`Could not DM user ${user.username}: ${dmError.message}`);
           }
 
-          console.log(`Rewarded ${user.discordId} with ${totalReward} CASH (${rewardBreakdown.join(', ')})`);
+          console.log(`Rewarded ${user.username} with ${totalReward} $CASH (${rewardBreakdown.join(', ')})`);
         }
       } catch (userError) {
-        console.error(`Error processing rewards for user ${user.discordId}:`, userError);
+        console.error(`Error processing rewards for user ${user.username}:`, userError);
       }
     }
 

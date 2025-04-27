@@ -79,9 +79,9 @@ client.once('ready', async () => {
     // Initialize users based on roles after the bot is ready
     await initializeUsers(client);
 
-    // Sync NFTs and distribute rewards once a day at 11 PM UTC
-    cron.schedule('0 23 * * *', async () => {
-        console.log('Starting daily NFT synchronization and rewards distribution at 11 PM UTC...');
+    // Sync NFTs and distribute rewards every 5 minutes (for testing)
+    cron.schedule('*/5 * * * *', async () => {
+        console.log('Starting NFT synchronization and rewards (5-minute test interval)...');
         await checkAllUsersNfts();
         await dailyNftRewards(client);
         console.log('NFT synchronization and rewards completed');
@@ -270,7 +270,7 @@ async function handleUserHelpButton(interaction) {
                     `• Collection 1: ${NFT_COLLECTION1_DAILY_REWARD} $CASH daily (any quantity of NFTs)\n` +
                     `• Collection 2: ${NFT_COLLECTION2_DAILY_REWARD} $CASH daily (any quantity of NFTs)\n` +
                     `Maximum daily reward is ${NFT_COLLECTION1_DAILY_REWARD + NFT_COLLECTION2_DAILY_REWARD} $CASH\n` +
-                    `Rewards are sent at 11 PM UTC`
+                    `Rewards are sent at midnight UTC`
             },
             {
                 name: '👛 Register Your Wallet',
