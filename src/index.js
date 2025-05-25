@@ -87,31 +87,20 @@ client.once('ready', async () => {
         console.log('NFT synchronization and rewards completed');
     });
 
-    // Schedule weekly reset and export on Sundays at midnight
-    cron.schedule('0 0 * * 0', async () => {
-        console.log('Running weekly reset task');
+    // Schedule weekly snapshot, export and reset on Mondays at 3 AM UTC
+    cron.schedule('0 3 * * 1', async () => {
+        console.log('Running weekly snapshot task at 3 AM UTC Monday');
 
         // Export weekly data before reset
         await exportLeaderboards(true, true);
 
+        // Export total leaderboards
+        await exportLeaderboards(false);
+
         // Reset weekly stats
         await resetWeeklyStats();
 
-        console.log('Weekly reset completed');
-    });
-
-    // Schedule leaderboard export to Google Sheets every Sunday at 11 PM UTC
-    cron.schedule('0 23 * * 0', async () => {
-        console.log('Running scheduled leaderboard export to Google Sheets');
-
-        // Export total leaderboards
-        const success = await exportLeaderboards(false);
-
-        if (success) {
-            console.log('Successfully exported total leaderboards to Google Sheets');
-        } else {
-            console.error('Failed to export total leaderboards to Google Sheets');
-        }
+        console.log('Weekly snapshot, export and reset completed');
     });
 });
 
