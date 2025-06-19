@@ -6,8 +6,9 @@ const path = require('path');
 const cron = require('node-cron');
 
 const { loadCommands } = require('./handlers/commandHandler');
-const { handleMessagePoints, resetWeeklyStats } = require('./utils/pointsManager');
+const { handleMessagePoints, resetWeeklyStats, updateGangTotals } = require('./utils/pointsManager');
 const { dailyNftRewards } = require('./utils/nftRewards');
+const { dailySpecialRoleRewards } = require('./utils/dailyRoleRewards');
 const { initializeGangs } = require('./utils/initializeGangs');
 const { initializeUsers } = require('./utils/initializeUsers');
 const { exportLeaderboards } = require('./utils/googleSheets');
@@ -85,6 +86,13 @@ client.once('ready', async () => {
         await checkAllUsersNfts();
         await dailyNftRewards(client);
         console.log('NFT synchronization and rewards completed');
+    });
+
+    // Distribute 500 $CASH daily to members with special role at 11:10 PM UTC
+    cron.schedule('10 23 * * *', async () => {
+        console.log('Starting daily special role rewards distribution at 11:10 PM UTC...');
+        await dailySpecialRoleRewards(client);
+        console.log('Daily special role rewards completed');
     });
 
     // Schedule weekly snapshot, export and reset on Mondays at 3 AM UTC
@@ -358,4 +366,7 @@ client.on('messageCreate', async message => {
 });
 
 // Login to Discord
-client.login(process.env.DISCORD_TOKEN); 
+client.login(process.env.DISCORD_TOKEN);
+
+// Export client for use in other modules
+module.exports = { client }; 
