@@ -6,36 +6,48 @@ const { isModerator } = require('../utils/permissions');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('manageticket')
-        .setDescription('Gerenciar tickets/eventos (apenas moderadores)')
+        .setDescription('Manage tickets/events (moderators only)')
         .addStringOption(option =>
             option.setName('ticket_name')
-                .setDescription('Nome do ticket/evento')
-                .setRequired(true))
+                .setDescription('Name of the ticket/event')
+                .setRequired(true)
+                .setAutocomplete(true))
         .addStringOption(option =>
             option.setName('action')
-                .setDescription('Ação a ser executada')
+                .setDescription('Action to perform')
                 .addChoices(
-                    { name: 'Ver Detalhes', value: 'details' },
-                    { name: 'Pausar', value: 'pause' },
-                    { name: 'Ativar', value: 'activate' },
-                    { name: 'Completar', value: 'complete' },
-                    { name: 'Cancelar', value: 'cancel' },
-                    { name: '🗑️ Deletar (Irreversível)', value: 'delete' },
-                    { name: '💰 Cancelar e Reembolsar', value: 'refund' }
+                    { name: 'View Details', value: 'details' },
+                    { name: 'Pause', value: 'pause' },
+                    { name: 'Activate', value: 'activate' },
+                    { name: 'Complete', value: 'complete' },
+                    { name: 'Cancel', value: 'cancel' },
+                    { name: '🗑️ Delete (Irreversible)', value: 'delete' },
+                    { name: '💰 Cancel & Refund', value: 'refund' }
                 )
                 .setRequired(true))
         .addBooleanOption(option =>
             option.setName('confirm')
-                .setDescription('Confirmar ação (necessário para delete/refund)'))
+                .setDescription('Confirm action (required for delete/refund)'))
         .addBooleanOption(option =>
             option.setName('remove_roles')
-                .setDescription('Remover roles dos participantes (para delete/refund)')),
+                .setDescription('Remove roles from participants (for delete/refund)')),
+
+    async autocomplete(interaction) {
+        const focusedValue = interaction.options.getFocused();
+        const tickets = await Ticket.find({
+            status: { $in: ['active', 'paused', 'pre-delete', 'completed'] },
+            name: { $regex: focusedValue, $options: 'i' }
+        }).limit(25);
+
+        await interaction.respond(
+            tickets.map(ticket => ({ name: `[${ticket.status.toUpperCase()}] ${ticket.name}`, value: ticket.name })),
+        );
+    },
 
     async execute(interaction, client) {
-        // Verificar se é moderador
         if (!isModerator(interaction.member)) {
             return interaction.reply({
-                content: '❌ Apenas moderadores podem gerenciar tickets.',
+                content: '❌ Only moderators can manage tickets.',
                 ephemeral: true
             });
         }
@@ -46,12 +58,9 @@ module.exports = {
             const ticketName = interaction.options.getString('ticket_name');
             const action = interaction.options.getString('action');
             const confirm = interaction.options.getBoolean('confirm') || false;
-            const removeRoles = interaction.options.getBoolean('remove_roles') !== false; // Default true
+            const removeRoles = interaction.options.getBoolean('remove_roles') !== false;
 
-            // Buscar o ticket
-            const ticket = await Ticket.findOne({
-                name: { $regex: ticketName, $options: 'i' }
-            });
+            const ticket = await Ticket.findOne({ name: ticketName });
 
             if (!ticket) {
                 return interaction.editReply({
@@ -60,42 +69,40 @@ module.exports = {
             }
 
             if (action === 'details') {
-                // Mostrar detalhes do ticket
                 const embed = new EmbedBuilder()
                     .setColor('#4ECDC4')
-                    .setTitle('🎫 Detalhes do Ticket')
+                    .setTitle('🎫 Ticket Details')
                     .setDescription(`**${ticket.name}**`)
                     .addFields(
-                        { name: '📝 Descrição', value: ticket.description, inline: false },
-                        { name: '💰 Preço', value: `${ticket.price} $CASH`, inline: true },
-                        { name: '🎫 Vendidos/Total', value: `${ticket.soldTickets}/${ticket.maxTickets}`, inline: true },
-                        { name: '📊 Disponíveis', value: ticket.getAvailableTickets().toString(), inline: true },
+                        { name: '📝 Description', value: ticket.description, inline: false },
+                        { name: '💰 Price', value: `${ticket.price} $CASH`, inline: true },
+                        { name: '🎫 Sold/Total', value: `${ticket.soldTickets}/${ticket.maxTickets}`, inline: true },
+                        { name: '📊 Available', value: ticket.getAvailableTickets().toString(), inline: true },
                         { name: '🏷️ Role', value: ticket.roleName, inline: true },
-                        { name: '🎮 Tipo', value: ticket.eventType.charAt(0).toUpperCase() + ticket.eventType.slice(1), inline: true },
+                        { name: '🎮 Type', value: ticket.eventType.charAt(0).toUpperCase() + ticket.eventType.slice(1), inline: true },
                         { name: '📈 Status', value: ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1), inline: true },
-                        { name: '💰 Receita Total', value: `${ticket.getTotalRevenue()} $CASH`, inline: true },
-                        { name: '👤 Máximo por Usuário', value: ticket.settings.maxTicketsPerUser.toString(), inline: true },
-                        { name: '⚙️ Auto-assign Role', value: ticket.settings.autoAssignRole ? 'Sim' : 'Não', inline: true },
-                        { name: '📅 Criado em', value: ticket.createdAt.toLocaleString('pt-BR'), inline: true },
-                        { name: '📅 Última Atualização', value: ticket.updatedAt.toLocaleString('pt-BR'), inline: true }
+                        { name: '💰 Total Revenue', value: `${ticket.getTotalRevenue()} $CASH`, inline: true },
+                        { name: '👤 Max Per User', value: ticket.settings.maxTicketsPerUser.toString(), inline: true },
+                        { name: '⚙️ Auto-assign Role', value: ticket.settings.autoAssignRole ? 'Yes' : 'No', inline: true },
+                        { name: '📅 Created At', value: ticket.createdAt.toLocaleString('en-US'), inline: true },
+                        { name: '📅 Last Updated', value: ticket.updatedAt.toLocaleString('en-US'), inline: true }
                     );
 
                 if (ticket.timeLimitDate) {
                     embed.addFields({
-                        name: '⏰ Data Limite',
-                        value: ticket.timeLimitDate.toLocaleString('pt-BR'),
+                        name: '⏰ Time Limit',
+                        value: ticket.timeLimitDate.toLocaleString('en-US'),
                         inline: true
                     });
                 }
 
-                // Adicionar informações específicas por tipo
                 if (ticket.eventType === 'lottery' && ticket.lottery) {
                     embed.addFields({
-                        name: '🎲 Informações da Loteria',
+                        name: '🎲 Lottery Info',
                         value: [
-                            `💰 Prêmio: ${ticket.lottery.prizePool} $CASH`,
-                            `🎲 Sorteado: ${ticket.lottery.drawn ? 'Sim' : 'Não'}`,
-                            ticket.lottery.drawDate ? `📅 Data do Sorteio: ${ticket.lottery.drawDate.toLocaleString('pt-BR')}` : ''
+                            `💰 Prize: ${ticket.lottery.prizePool} $CASH`,
+                            `🎲 Drawn: ${ticket.lottery.drawn ? 'Yes' : 'No'}`,
+                            ticket.lottery.drawDate ? `📅 Draw Date: ${ticket.lottery.drawDate.toLocaleString('en-US')}` : ''
                         ].filter(Boolean).join('\n'),
                         inline: false
                     });
@@ -107,66 +114,61 @@ module.exports = {
                 return interaction.editReply({ embeds: [embed] });
             }
 
-            // Ações de delete/refund
             if (action === 'delete' || action === 'refund') {
-                // Buscar compras ativas
                 const activePurchases = await TicketPurchase.find({
                     ticketId: ticket._id,
                     status: 'active'
                 });
 
-                // Se não confirmou, mostrar aviso
                 if (!confirm) {
                     const embed = new EmbedBuilder()
                         .setColor('#FF6B6B')
-                        .setTitle('⚠️ Confirmação Necessária')
+                        .setTitle('⚠️ Confirmation Required')
                         .setDescription(`**${ticket.name}**`)
                         .addFields(
-                            { name: '🎫 Tickets Vendidos', value: `${ticket.soldTickets}/${ticket.maxTickets}`, inline: true },
-                            { name: '💰 Receita Total', value: `${ticket.getTotalRevenue()} $CASH`, inline: true },
-                            { name: '👥 Participantes Ativos', value: activePurchases.length.toString(), inline: true },
-                            { name: '🎮 Tipo', value: ticket.eventType.charAt(0).toUpperCase() + ticket.eventType.slice(1), inline: true },
+                            { name: '🎫 Tickets Sold', value: `${ticket.soldTickets}/${ticket.maxTickets}`, inline: true },
+                            { name: '💰 Total Revenue', value: `${ticket.getTotalRevenue()} $CASH`, inline: true },
+                            { name: '👥 Active Participants', value: activePurchases.length.toString(), inline: true },
+                            { name: '🎮 Type', value: ticket.eventType.charAt(0).toUpperCase() + ticket.eventType.slice(1), inline: true },
                             { name: '📈 Status', value: ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1), inline: true },
-                            { name: '📅 Criado em', value: ticket.createdAt.toLocaleString('pt-BR'), inline: true }
+                            { name: '📅 Created At', value: ticket.createdAt.toLocaleString('en-US'), inline: true }
                         );
 
                     if (action === 'delete') {
                         embed.addFields({
-                            name: '🗑️ Ação: Deletar Completamente',
-                            value: '⚠️ **ATENÇÃO:** Esta ação é irreversível!\n\n' +
-                                '• Ticket será removido permanentemente\n' +
-                                '• Todas as compras serão deletadas\n' +
-                                '• Histórico será perdido\n' +
-                                '• Roles serão removidos (se configurado)',
+                            name: '🗑️ Action: Delete Completely',
+                            value: '⚠️ **WARNING:** This action is irreversible!\n\n' +
+                                '• Ticket will be permanently removed\n' +
+                                '• All purchases will be deleted\n' +
+                                '• History will be lost\n' +
+                                '• Roles will be removed (if configured)',
                             inline: false
                         });
                     } else if (action === 'refund') {
                         embed.addFields({
-                            name: '💰 Ação: Cancelar e Reembolsar',
-                            value: '✅ **SEGURO:** Esta ação reembolsa os usuários!\n\n' +
-                                '• Ticket será cancelado\n' +
-                                '• Todos receberão reembolso\n' +
-                                '• Roles serão removidos\n' +
-                                '• Histórico será mantido',
+                            name: '💰 Action: Cancel & Refund',
+                            value: '✅ **SAFE:** This action refunds users!\n\n' +
+                                '• Ticket will be cancelled\n' +
+                                '• Everyone will be refunded\n' +
+                                '• Roles will be removed\n' +
+                                '• History will be kept',
                             inline: false
                         });
                     }
 
-                    embed.setFooter({ text: 'Use confirm:true para executar a ação' })
+                    embed.setFooter({ text: 'Use confirm:true to execute this action' })
                         .setTimestamp();
 
                     return interaction.editReply({
-                        content: '⚠️ Confirmação necessária para deletar ticket!',
+                        content: '⚠️ Confirmation required to manage this ticket!',
                         embeds: [embed]
                     });
                 }
 
-                // Executar ação confirmada
                 let resultMessage = '';
                 let embedColor = '#00FF00';
 
                 if (action === 'delete') {
-                    // Deletar completamente
                     if (removeRoles) {
                         const guild = client.guilds.cache.get(process.env.DISCORD_GUILD_ID);
                         if (guild) {
@@ -183,18 +185,12 @@ module.exports = {
                             }
                         }
                     }
-
-                    // Deletar todas as compras
                     await TicketPurchase.deleteMany({ ticketId: ticket._id });
-
-                    // Deletar o ticket
                     await Ticket.deleteOne({ _id: ticket._id });
-
-                    resultMessage = `🗑️ Ticket "${ticket.name}" deletado completamente!`;
+                    resultMessage = `🗑️ Ticket "${ticket.name}" has been permanently deleted!`;
                     embedColor = '#FF0000';
 
                 } else if (action === 'refund') {
-                    // Cancelar e reembolsar
                     const { awardCash } = require('../utils/pointsManager');
 
                     let refundedCount = 0;
@@ -207,7 +203,6 @@ module.exports = {
                         }
                     }
 
-                    // Remover roles se configurado
                     if (removeRoles) {
                         const guild = client.guilds.cache.get(process.env.DISCORD_GUILD_ID);
                         if (guild) {
@@ -224,53 +219,36 @@ module.exports = {
                         }
                     }
 
-                    // Marcar compras como reembolsadas
                     await TicketPurchase.updateMany(
                         { ticketId: ticket._id, status: 'active' },
                         { status: 'refunded' }
                     );
 
-                    // Cancelar ticket
                     ticket.status = 'cancelled';
                     await ticket.save();
 
-                    resultMessage = `💰 Ticket "${ticket.name}" cancelado e ${refundedCount} usuários reembolsados!`;
+                    resultMessage = `💰 Ticket "${ticket.name}" has been cancelled and ${refundedCount} users refunded!`;
                     embedColor = '#FFA500';
                 }
 
                 const embed = new EmbedBuilder()
                     .setColor(embedColor)
-                    .setTitle('✅ Ação Executada')
+                    .setTitle('✅ Action Executed')
                     .setDescription(`**${ticket.name}**`)
                     .addFields(
-                        { name: '👤 Moderador', value: interaction.user.username, inline: true },
-                        { name: '📅 Data', value: new Date().toLocaleString('pt-BR'), inline: true },
-                        { name: '🗑️ Roles Removidos', value: removeRoles ? 'Sim' : 'Não', inline: true }
+                        { name: '👤 Moderator', value: interaction.user.username, inline: true },
+                        { name: '📅 Date', value: new Date().toLocaleString('en-US'), inline: true },
+                        { name: '🗑️ Roles Removed', value: removeRoles ? 'Yes' : 'No', inline: true }
                     );
 
-                if (action === 'refund') {
-                    embed.addFields({
-                        name: '💰 Reembolsos',
-                        value: `${activePurchases.length} usuários reembolsados`,
-                        inline: false
-                    });
-                }
-
-                embed.setFooter({ text: `ID: ${ticket._id}` })
-                    .setTimestamp();
-
-                await interaction.editReply({
+                return interaction.editReply({
                     content: resultMessage,
                     embeds: [embed]
                 });
-
-                return;
             }
 
-            // Executar ação normal
             let newStatus;
-            let actionText;
-
+            let actionText = '';
             switch (action) {
                 case 'pause':
                     newStatus = 'paused';
@@ -289,34 +267,20 @@ module.exports = {
                     actionText = 'completed';
                     break;
                 default:
-                    return interaction.editReply({
-                        content: '❌ Ação inválida.'
-                    });
+                    return interaction.editReply({ content: '❌ Invalid action.' });
             }
 
-            // Verificar se a mudança é válida
-            if (ticket.status === newStatus) {
-                return interaction.editReply({
-                    content: `❌ O ticket já está ${actionText}.`
-                });
-            }
-
-            // Atualizar status
             ticket.status = newStatus;
             await ticket.save();
 
             const embed = new EmbedBuilder()
                 .setColor('#00FF00')
-                .setTitle('✅ Ticket Atualizado')
-                .setDescription(`**${ticket.name}**`)
+                .setTitle('✅ Ticket Status Updated')
+                .setDescription(`Ticket **${ticket.name}** is now **${newStatus}**.`)
                 .addFields(
-                    { name: '🔄 Status Anterior', value: ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1), inline: true },
-                    { name: '✅ Novo Status', value: newStatus.charAt(0).toUpperCase() + newStatus.slice(1), inline: true },
-                    { name: '👤 Moderador', value: interaction.user.username, inline: true },
-                    { name: '📅 Data', value: new Date().toLocaleString('pt-BR'), inline: true }
-                )
-                .setFooter({ text: `ID: ${ticket._id}` })
-                .setTimestamp();
+                    { name: '👤 Moderator', value: interaction.user.username, inline: true },
+                    { name: '📅 Date', value: new Date().toLocaleString('en-US'), inline: true }
+                );
 
             await interaction.editReply({
                 content: `✅ Ticket ${actionText} successfully!`,

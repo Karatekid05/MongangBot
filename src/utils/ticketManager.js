@@ -291,20 +291,23 @@ async function getParticipantsByRole(roleId) {
 }
 
 /**
- * Export participants list
+ * Export participants list for a specific ticket
  */
-async function exportParticipantsList(roleId) {
+async function exportParticipantsList(ticketId) {
     try {
-        const participants = await getParticipantsByRole(roleId);
-        
-        if (participants.length === 0) {
-            return 'No participants found for this role.';
+        const purchases = await TicketPurchase.find({
+            ticketId: ticketId
+        }).populate('ticketId');
+
+        if (purchases.length === 0) {
+            return 'No participants found for this ticket.';
         }
 
-        const csvHeader = 'Username,User ID,Quantity,Total Price,Purchase Date,Ticket\n';
-        const csvRows = participants.map(p => 
-            `"${p.username}","${p.userId}",${p.quantity},${p.totalPrice},"${p.purchaseDate.toLocaleString('en-US')}","${p.ticketName}"`
-        ).join('\n');
+        const csvHeader = 'Username,User ID,Quantity,Total Price,Purchase Date,Ticket,Ticket Numbers\n';
+        const csvRows = purchases.map(p => {
+            const ticketNumbers = p.ticketNumbers ? p.ticketNumbers.join(';') : 'N/A';
+            return `"${p.username}","${p.userId}",${p.quantity},${p.totalPrice},"${p.purchaseDate.toLocaleString('en-US')}","${p.ticketId.name}","${ticketNumbers}"`;
+        }).join('\n');
 
         return csvHeader + csvRows;
     } catch (error) {
@@ -408,7 +411,7 @@ async function removeTicketRoles(ticketId, client) {
 
         let removedCount = 0;
         const guild = client.guilds.cache.get(process.env.DISCORD_GUILD_ID);
-        
+
         if (guild) {
             for (const purchase of purchases) {
                 try {

@@ -8,12 +8,23 @@ module.exports = {
         .addStringOption(option =>
             option.setName('ticket_name')
                 .setDescription('Ticket/event name (optional - shows list if not specified)')
-                .setRequired(false))
+                .setRequired(false)
+                .setAutocomplete(true))
         .addIntegerOption(option =>
             option.setName('quantity')
                 .setDescription('Number of tickets')
                 .setMinValue(1)
                 .setMaxValue(10)),
+
+    async autocomplete(interaction) {
+        const focusedValue = interaction.options.getFocused();
+        const activeTickets = await listActiveTickets();
+        const filtered = activeTickets.filter(choice => choice.name.toLowerCase().includes(focusedValue.toLowerCase()));
+
+        await interaction.respond(
+            filtered.map(choice => ({ name: choice.name, value: choice.name })),
+        );
+    },
 
     async execute(interaction, client) {
         await interaction.deferReply({ ephemeral: true });
@@ -65,7 +76,7 @@ module.exports = {
                 });
 
                 // Create buttons for each ticket
-                const buttons = activeTickets.map((ticket, index) => 
+                const buttons = activeTickets.map((ticket, index) =>
                     new ButtonBuilder()
                         .setCustomId(`buy_ticket_${ticket._id}`)
                         .setLabel(`Buy ${ticket.name}`)
@@ -83,7 +94,7 @@ module.exports = {
                 embed.setFooter({ text: 'Click a button to buy tickets' })
                     .setTimestamp();
 
-                return interaction.editReply({ 
+                return interaction.editReply({
                     embeds: [embed],
                     components: rows
                 });

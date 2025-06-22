@@ -29,19 +29,18 @@ module.exports = {
 
             // Add each ticket as a field
             tickets.forEach((ticket, index) => {
-                const status = ticket.status === 'active' ? '🟢' : '🔴';
+                const status = ticket.status === 'active' ? '🟢' : ticket.status === 'paused' ? '🟡' : '🔴';
                 const availableTickets = ticket.getAvailableTickets();
-                const soldPercentage = ((ticket.soldTickets / ticket.maxTickets) * 100).toFixed(1);
+                const soldPercentage = ticket.maxTickets > 0 ? ((ticket.soldTickets / ticket.maxTickets) * 100).toFixed(1) : 0;
 
                 const fieldValue = [
-                    `📝 **${ticket.description}**`,
-                    `💰 **Price:** ${ticket.price} $CASH`,
-                    `🎫 **Available:** ${availableTickets}/${ticket.maxTickets} (${soldPercentage}% sold)`,
-                    `👤 **Max per user:** ${ticket.settings.maxTicketsPerUser}`,
-                    `🏷️ **Role:** ${ticket.roleName}`,
-                    `🎮 **Type:** ${ticket.eventType.charAt(0).toUpperCase() + ticket.eventType.slice(1)}`,
-                    `📅 **Created:** ${ticket.createdAt.toLocaleDateString('en-US')}`
-                ];
+                    `> 📝 **Description:** ${ticket.description}`,
+                    `> 💰 **Price:** ${ticket.price} $CASH`,
+                    `> 🎫 **Available:** ${availableTickets}/${ticket.maxTickets} (${soldPercentage}% sold)`,
+                    `> 👤 **Max per user:** ${ticket.settings.maxTicketsPerUser}`,
+                    `> 🏷️ **Role:** ${ticket.roleName}`,
+                    `> 🎮 **Type:** ${ticket.eventType.charAt(0).toUpperCase() + ticket.eventType.slice(1)}`
+                ].join('\n');
 
                 // Add time limit if exists
                 if (ticket.timeLimitDate) {
@@ -61,8 +60,8 @@ module.exports = {
                 }
 
                 embed.addFields({
-                    name: `${status} ${ticket.name}`,
-                    value: fieldValue.join('\n'),
+                    name: `${status} __**${ticket.name}**__`,
+                    value: fieldValue,
                     inline: false
                 });
             });
