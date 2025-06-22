@@ -6,7 +6,8 @@
 // Hardcoded para garantir consistência com pointsManager.js
 const TEAM_ROLE_IDS = [
     '1339293248308641883', // Founders
-    '1338993206112817283'  // Moderators
+    '1338993206112817283', // Moderators
+    '1353403238241669132'  // Additional moderator role
 ];
 
 /**

@@ -10,7 +10,7 @@ BOT_DIR=$(pwd)
 mkdir -p ${BOT_DIR}/logs
 
 echo "✅ Cron job configurado para executar diariamente à meia-noite"
-echo "📄 Os logs serão salvos em: ${BOT_DIR}/logs/sync_gangs.log"
+echo "📄 Os logs serão salvos em: ${BOT_DIR}/logs/sync_gangs.log" 
 echo ""
 echo "ℹ️  Nota: O bot também possui agendamentos internos:"
 echo "   • 23:00 UTC - Sincronização de NFTs e distribuição de recompensas"

@@ -21,9 +21,15 @@ module.exports = {
             .setStyle(ButtonStyle.Secondary)
             .setEmoji('🛡️');
 
+        const ticketHelpButton = new ButtonBuilder()
+            .setCustomId('ticket_help')
+            .setLabel('Ticket System')
+            .setStyle(ButtonStyle.Success)
+            .setEmoji('🎫');
+
         // Create the action row with buttons
         const row = new ActionRowBuilder()
-            .addComponents(userHelpButton, moderatorHelpButton);
+            .addComponents(userHelpButton, moderatorHelpButton, ticketHelpButton);
 
         // Create initial embed
         const initialEmbed = new EmbedBuilder()
@@ -31,8 +37,9 @@ module.exports = {
             .setTitle('MonGang Bot Help')
             .setDescription('Welcome to the MonGang Bot Help Center! Please select an option below:')
             .addFields(
-                { name: 'User Guide', value: 'Learn how to use commands available to all users', inline: true },
-                { name: 'Moderator Guide', value: 'Learn how to use moderator-only commands', inline: true }
+                { name: '👤 User Guide', value: 'Learn how to use commands available to all users', inline: true },
+                { name: '🛡️ Moderator Guide', value: 'Learn how to use moderator-only commands', inline: true },
+                { name: '🎫 Ticket System', value: 'Learn about the ticket/event system', inline: true }
             )
             .setFooter({ text: 'MonGang Bot • Help System' })
             .setTimestamp();

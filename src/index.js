@@ -110,6 +110,33 @@ client.once('ready', async () => {
 
         console.log('Weekly snapshot, export and reset completed');
     });
+
+    // Schedule leaderboard export to Google Sheets every Sunday at 11 PM UTC
+    cron.schedule('0 23 * * 0', async () => {
+        console.log('Running scheduled leaderboard export to Google Sheets');
+
+        // Export total leaderboards
+        const success = await exportLeaderboards(false);
+
+        if (success) {
+            console.log('Successfully exported total leaderboards to Google Sheets');
+        } else {
+            console.error('Failed to export total leaderboards to Google Sheets');
+        }
+    });
+
+    // Check ticket time limits and auto-resets every 5 minutes
+    cron.schedule('*/5 * * * *', async () => {
+        console.log('Checking ticket time limits and auto-resets...');
+
+        try {
+            const { checkTimeLimits, checkAndResetTickets } = require('./utils/ticketManager');
+            await checkTimeLimits();
+            await checkAndResetTickets(client);
+        } catch (error) {
+            console.error('Error checking ticket limits and resets:', error);
+        }
+    });
 });
 
 // Update username when it changes
@@ -132,73 +159,77 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     if (oldMember.roles.cache.size === newMember.roles.cache.size) return;
 
     try {
-        // Primeiro, verificamos se o usuário está mudando de gang
+        // Verificar se houve mudança de gang
         let oldGang = null;
         let newGang = null;
 
-        // Encontrar a gang antiga, se existir
+        // Encontrar a gang antiga (se o usuário tinha antes e não tem mais)
         for (const gang of GANGS) {
             if (oldMember.roles.cache.has(gang.roleId) && !newMember.roles.cache.has(gang.roleId)) {
                 oldGang = gang;
+                break;
             }
         }
 
-        // Encontrar a nova gang, se existir
+        // Encontrar a nova gang (se o usuário não tinha antes e tem agora)
         for (const gang of GANGS) {
-            // Se o usuário não tinha esse role antes e tem agora
             if (!oldMember.roles.cache.has(gang.roleId) && newMember.roles.cache.has(gang.roleId)) {
                 newGang = gang;
-
-                // Buscar o usuário no banco de dados
-                let user = await User.findOne({ userId: newMember.id });
-
-                if (user) {
-                    // Usuário existente mudando de gang
-                    console.log(`User ${newMember.user.username} changing gang: ${user.gangId} -> ${gang.roleId}`);
-
-                    // Verifica se realmente é uma mudança de gang (não apenas adição de outro role)
-                    if (user.gangId !== gang.roleId) {
-                        const previousGangId = user.gangId;
-
-                        // Salvar contribuição atual para a gang antiga
-                        if (!user.gangContributions) {
-                            user.gangContributions = new Map();
-                        }
-
-                        // Armazenar a contribuição atual na gang anterior
-                        const currentContribution = user.gangContributions.get(previousGangId) || 0;
-                        user.gangContributions.set(previousGangId, currentContribution + user.cash);
-
-                        console.log(`Stored ${user.cash} $CASH as contribution to previous gang ${previousGangId}`);
-
-                        // Atualizar a gang nos dados do usuário
-                        user.previousGangId = previousGangId;
-                        user.gangId = gang.roleId;
-
-                        // Salvar as alterações
-                        await user.save();
-
-                        console.log(`Gang updated for ${newMember.user.username}: ${gang.name}`);
-
-                        // Atualizar os totais das duas gangs
-                        await updateGangTotals(previousGangId);
-                        await updateGangTotals(gang.roleId);
-                    }
-                } else {
-                    // Criar novo usuário
-                    user = new User({
-                        userId: newMember.id,
-                        username: newMember.user.username,
-                        gangId: gang.roleId,
-                        cash: 0,
-                        weeklyCash: 0,
-                        lastMessageReward: new Date(0),
-                        gangContributions: new Map()
-                    });
-                    await user.save();
-                    console.log(`New user created for ${newMember.user.username} in gang ${gang.name}`);
-                }
+                break;
             }
+        }
+
+        // Se não houve mudança de gang, sair
+        if (!oldGang && !newGang) return;
+
+        // Buscar o usuário no banco de dados
+        let user = await User.findOne({ userId: newMember.id });
+
+        if (user) {
+            // Usuário existente
+            if (newGang && user.gangId !== newGang.roleId) {
+                // Usuário mudando para uma nova gang
+                console.log(`User ${newMember.user.username} changing gang: ${user.gangId} -> ${newGang.roleId}`);
+
+                const previousGangId = user.gangId;
+
+                // Salvar contribuição atual para a gang antiga
+                if (!user.gangContributions) {
+                    user.gangContributions = new Map();
+                }
+
+                // Armazenar a contribuição atual na gang anterior
+                const currentContribution = user.gangContributions.get(previousGangId) || 0;
+                user.gangContributions.set(previousGangId, currentContribution + user.cash);
+
+                console.log(`Stored ${user.cash} $CASH as contribution to previous gang ${previousGangId}`);
+
+                // Atualizar a gang nos dados do usuário
+                user.previousGangId = previousGangId;
+                user.gangId = newGang.roleId;
+
+                // Salvar as alterações
+                await user.save();
+
+                console.log(`Gang updated for ${newMember.user.username}: ${newGang.name}`);
+
+                // Atualizar os totais das duas gangs
+                await updateGangTotals(previousGangId);
+                await updateGangTotals(newGang.roleId);
+            }
+        } else if (newGang) {
+            // Criar novo usuário
+            user = new User({
+                userId: newMember.id,
+                username: newMember.user.username,
+                gangId: newGang.roleId,
+                cash: 0,
+                weeklyCash: 0,
+                lastMessageReward: new Date(0),
+                gangContributions: new Map()
+            });
+            await user.save();
+            console.log(`New user created for ${newMember.user.username} in gang ${newGang.name}`);
         }
     } catch (error) {
         console.error('Error processing role change:', error);
@@ -240,6 +271,8 @@ client.on('interactionCreate', async interaction => {
             handleUserHelpButton(interaction);
         } else if (customId === 'mod_help') {
             handleModeratorHelpButton(interaction);
+        } else if (customId === 'ticket_help') {
+            handleTicketHelpButton(interaction);
         }
     }
 });
@@ -268,6 +301,13 @@ async function handleUserHelpButton(interaction) {
                     `• Collection 2: ${NFT_COLLECTION2_DAILY_REWARD} $CASH daily (any quantity of NFTs)\n` +
                     `Maximum daily reward is ${NFT_COLLECTION1_DAILY_REWARD + NFT_COLLECTION2_DAILY_REWARD} $CASH\n` +
                     `Rewards are sent at 11 PM UTC`
+            },
+            {
+                name: '🎫 Ticket System',
+                value: 'Buy tickets for events, lotteries, and tournaments:\n' +
+                    '• `/tickets` - See available tickets\n' +
+                    '• `/buyticket` - Buy tickets for events\n' +
+                    '• Automatic role assignment when you buy tickets'
             },
             {
                 name: '👛 Register Your Wallet',
@@ -315,6 +355,13 @@ async function handleModeratorHelpButton(interaction) {
         .setDescription('Administration commands and features for moderators only.')
         .addFields(
             {
+                name: '🎫 Ticket System Management',
+                value: '`/createticket` - Create new tickets/events\n' +
+                    '`/manageticket` - Manage, pause, or delete tickets\n' +
+                    '`/drawlottery` - Draw lottery winners\n' +
+                    '`/exportparticipants` - Export participant lists'
+            },
+            {
                 name: '💰 Award $CASH',
                 value: '`/award user:@user source:[Games/Memes/Chat/Others] amount:100`\n' +
                     'Award $CASH to users for various activities. The source parameter helps with tracking.'
@@ -355,6 +402,64 @@ async function handleModeratorHelpButton(interaction) {
         .setTimestamp();
 
     await interaction.reply({ embeds: [modHelpEmbed], ephemeral: true });
+}
+
+/**
+ * Handle the Ticket System Help button click
+ * @param {ButtonInteraction} interaction 
+ */
+async function handleTicketHelpButton(interaction) {
+    const ticketHelpEmbed = new EmbedBuilder()
+        .setColor('#27AE60')
+        .setTitle('🎫 Ticket System Guide')
+        .setDescription('Learn about the ticket/event system for lotteries, tournaments, and special events!')
+        .addFields(
+            {
+                name: '🎮 Types of Events',
+                value: '• **Lottery** - Buy numbered tickets, automatic prize distribution\n' +
+                    '• **Poker** - Buy-in tournaments with prize pools\n' +
+                    '• **Tournament** - General tournaments (Smash, etc.)\n' +
+                    '• **Custom** - Any special event with role assignment'
+            },
+            {
+                name: '👤 For Users',
+                value: '• `/tickets` - See all available tickets\n' +
+                    '• `/buyticket` - Buy tickets (shows interactive list)\n' +
+                    '• Automatic role assignment when you buy\n' +
+                    '• Lottery winners receive prizes automatically'
+            },
+            {
+                name: '🛡️ For Moderators',
+                value: '• `/createticket` - Create new events\n' +
+                    '• `/manageticket` - Pause, complete, or delete tickets\n' +
+                    '• `/drawlottery` - Draw lottery winners\n' +
+                    '• `/exportparticipants` - Export participant lists'
+            },
+            {
+                name: '⏰ Time Limits',
+                value: '• Optional time limits for ticket sales\n' +
+                    '• When expired, tickets enter "pre-delete" state\n' +
+                    '• Moderators can export data or delete when ready'
+            },
+            {
+                name: '💰 Pricing & Prizes',
+                value: '• Set custom prices in $CASH\n' +
+                    '• Lottery prizes: 1º 50%, 2º 30%, 3º 20%\n' +
+                    '• Maximum tickets per user (1-10)\n' +
+                    '• Automatic role assignment'
+            },
+            {
+                name: '🗑️ Management',
+                value: '• Delete completely (irreversible)\n' +
+                    '• Cancel and refund all participants\n' +
+                    '• Export participant data\n' +
+                    '• Remove roles automatically'
+            }
+        )
+        .setFooter({ text: 'MonGang Bot • Ticket System' })
+        .setTimestamp();
+
+    await interaction.reply({ embeds: [ticketHelpEmbed], ephemeral: true });
 }
 
 client.on('messageCreate', async message => {
