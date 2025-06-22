@@ -273,6 +273,8 @@ client.on('interactionCreate', async interaction => {
             handleModeratorHelpButton(interaction);
         } else if (customId === 'ticket_help') {
             handleTicketHelpButton(interaction);
+        } else if (customId.startsWith('buy_ticket_')) {
+            handleBuyTicketButton(interaction);
         }
     }
 });
@@ -460,6 +462,71 @@ async function handleTicketHelpButton(interaction) {
         .setTimestamp();
 
     await interaction.reply({ embeds: [ticketHelpEmbed], ephemeral: true });
+}
+
+/**
+ * Handle the Buy Ticket button click
+ * @param {ButtonInteraction} interaction 
+ */
+async function handleBuyTicketButton(interaction) {
+    try {
+        await interaction.deferReply({ ephemeral: true });
+
+        const ticketId = interaction.customId.replace('buy_ticket_', '');
+        const userId = interaction.user.id;
+        const username = interaction.user.username;
+        const quantity = 1; // Default to 1 ticket per button click
+
+        const { buyTickets } = require('./utils/ticketManager');
+
+        // Buy tickets
+        const result = await buyTickets(ticketId, userId, username, quantity, interaction.client);
+
+        // Create confirmation embed
+        const embed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('🎫 Purchase Successful!')
+            .setDescription(`**${result.ticket.name}**`)
+            .addFields(
+                { name: '👤 Buyer', value: username, inline: true },
+                { name: '🎫 Quantity', value: quantity.toString(), inline: true },
+                { name: '💰 Total Price', value: `${result.purchase.totalPrice} $CASH`, inline: true },
+                { name: '📅 Date', value: result.purchase.purchaseDate.toLocaleString('en-US'), inline: true },
+                { name: '🏷️ Role', value: result.ticket.roleName, inline: true },
+                { name: '🎮 Type', value: result.ticket.eventType.charAt(0).toUpperCase() + result.ticket.eventType.slice(1), inline: true }
+            );
+
+        // Add ticket numbers if lottery
+        if (result.ticket.eventType === 'lottery' && result.purchase.ticketNumbers) {
+            embed.addFields({
+                name: '🎲 Ticket Numbers',
+                value: result.purchase.ticketNumbers.join(', '),
+                inline: false
+            });
+        }
+
+        // Add remaining tickets info
+        const remainingTickets = result.ticket.getAvailableTickets();
+        embed.addFields({
+            name: '📊 Remaining Tickets',
+            value: `${remainingTickets} of ${result.ticket.maxTickets}`,
+            inline: false
+        });
+
+        embed.setFooter({ text: `Purchase ID: ${result.purchase._id}` })
+            .setTimestamp();
+
+        await interaction.editReply({
+            content: '✅ Purchase completed successfully!',
+            embeds: [embed]
+        });
+
+    } catch (error) {
+        console.error('Error buying ticket via button:', error);
+        await interaction.editReply({
+            content: `❌ Error buying ticket: ${error.message}`
+        });
+    }
 }
 
 client.on('messageCreate', async message => {

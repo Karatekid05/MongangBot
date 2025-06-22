@@ -4,14 +4,14 @@ const { buyTickets, listActiveTickets } = require('../utils/ticketManager');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('buyticket')
-        .setDescription('Comprar tickets para eventos')
+        .setDescription('Buy tickets for events')
         .addStringOption(option =>
             option.setName('ticket_name')
-                .setDescription('Nome do ticket/evento (opcional - mostra lista se não especificado)')
+                .setDescription('Ticket/event name (optional - shows list if not specified)')
                 .setRequired(false))
         .addIntegerOption(option =>
             option.setName('quantity')
-                .setDescription('Quantidade de tickets')
+                .setDescription('Number of tickets')
                 .setMinValue(1)
                 .setMaxValue(10)),
 
@@ -24,37 +24,37 @@ module.exports = {
             const userId = interaction.user.id;
             const username = interaction.user.username;
 
-            // Buscar tickets ativos
+            // Get active tickets
             const activeTickets = await listActiveTickets();
 
             if (activeTickets.length === 0) {
                 const embed = new EmbedBuilder()
                     .setColor('#FF6B6B')
-                    .setTitle('🎫 Tickets Disponíveis')
-                    .setDescription('Não há tickets disponíveis no momento.')
+                    .setTitle('🎫 Available Tickets')
+                    .setDescription('No tickets available at the moment.')
                     .setTimestamp();
 
                 return interaction.editReply({ embeds: [embed] });
             }
 
-            // Se não especificou nome, mostrar lista
+            // If no name specified, show interactive list with buttons
             if (!ticketName) {
                 const embed = new EmbedBuilder()
                     .setColor('#4ECDC4')
-                    .setTitle('🎫 Tickets Disponíveis')
-                    .setDescription('Escolha um ticket para comprar:');
+                    .setTitle('🎫 Available Tickets')
+                    .setDescription('Click a button below to buy tickets:');
 
-                // Adicionar cada ticket como um campo
+                // Add each ticket as a field
                 activeTickets.forEach((ticket, index) => {
                     const availableTickets = ticket.getAvailableTickets();
                     const soldPercentage = ((ticket.soldTickets / ticket.maxTickets) * 100).toFixed(1);
 
                     const fieldValue = [
-                        `💰 **Preço:** ${ticket.price} $CASH`,
-                        `🎫 **Disponíveis:** ${availableTickets}/${ticket.maxTickets} (${soldPercentage}% vendidos)`,
-                        `👤 **Máximo por usuário:** ${ticket.settings.maxTicketsPerUser}`,
-                        `🎮 **Tipo:** ${ticket.eventType.charAt(0).toUpperCase() + ticket.eventType.slice(1)}`,
-                        `📅 **Criado:** ${ticket.createdAt.toLocaleDateString('pt-BR')}`
+                        `💰 **Price:** ${ticket.price} $CASH`,
+                        `🎫 **Available:** ${availableTickets}/${ticket.maxTickets} (${soldPercentage}% sold)`,
+                        `👤 **Max per user:** ${ticket.settings.maxTicketsPerUser}`,
+                        `🎮 **Type:** ${ticket.eventType.charAt(0).toUpperCase() + ticket.eventType.slice(1)}`,
+                        `📅 **Created:** ${ticket.createdAt.toLocaleDateString('en-US')}`
                     ].join('\n');
 
                     embed.addFields({
@@ -64,81 +64,100 @@ module.exports = {
                     });
                 });
 
-                embed.setFooter({ text: 'Use /buyticket ticket_name:"Nome do Ticket" quantity:1 para comprar' })
+                // Create buttons for each ticket
+                const buttons = activeTickets.map((ticket, index) => 
+                    new ButtonBuilder()
+                        .setCustomId(`buy_ticket_${ticket._id}`)
+                        .setLabel(`Buy ${ticket.name}`)
+                        .setStyle(ButtonStyle.Primary)
+                        .setEmoji('🎫')
+                );
+
+                // Split buttons into rows of 3
+                const rows = [];
+                for (let i = 0; i < buttons.length; i += 3) {
+                    const row = new ActionRowBuilder().addComponents(buttons.slice(i, i + 3));
+                    rows.push(row);
+                }
+
+                embed.setFooter({ text: 'Click a button to buy tickets' })
                     .setTimestamp();
 
-                return interaction.editReply({ embeds: [embed] });
+                return interaction.editReply({ 
+                    embeds: [embed],
+                    components: rows
+                });
             }
 
-            // Encontrar o ticket pelo nome (case insensitive)
+            // Find ticket by name (case insensitive)
             const ticket = activeTickets.find(t =>
                 t.name.toLowerCase().includes(ticketName.toLowerCase())
             );
 
             if (!ticket) {
-                // Mostrar tickets disponíveis
+                // Show available tickets
                 const availableTickets = activeTickets.map(t =>
-                    `• **${t.name}** - ${t.price} $CASH (${t.getAvailableTickets()} disponíveis)`
+                    `• **${t.name}** - ${t.price} $CASH (${t.getAvailableTickets()} available)`
                 ).join('\n');
 
                 const embed = new EmbedBuilder()
                     .setColor('#FF6B6B')
-                    .setTitle('🎫 Tickets Disponíveis')
+                    .setTitle('🎫 Available Tickets')
                     .setDescription(availableTickets)
-                    .setFooter({ text: 'Use o nome exato do ticket para comprar' });
+                    .setFooter({ text: 'Use the exact ticket name to buy' });
 
                 return interaction.editReply({
-                    content: `❌ Ticket "${ticketName}" não encontrado.`,
+                    content: `❌ Ticket "${ticketName}" not found.`,
                     embeds: [embed]
                 });
             }
 
-            // Comprar tickets
+            // Buy tickets
             const result = await buyTickets(ticket._id, userId, username, quantity, client);
 
-            // Criar embed de confirmação
+            // Create confirmation embed
             const embed = new EmbedBuilder()
                 .setColor('#00FF00')
-                .setTitle('🎫 Compra Realizada com Sucesso!')
+                .setTitle('🎫 Purchase Successful!')
                 .setDescription(`**${ticket.name}**`)
                 .addFields(
-                    { name: '👤 Comprador', value: username, inline: true },
-                    { name: '🎫 Quantidade', value: quantity.toString(), inline: true },
-                    { name: '💰 Preço Total', value: `${result.purchase.totalPrice} $CASH`, inline: true },
-                    { name: '📅 Data', value: result.purchase.purchaseDate.toLocaleString('pt-BR'), inline: true },
+                    { name: '👤 Buyer', value: username, inline: true },
+                    { name: '🎫 Quantity', value: quantity.toString(), inline: true },
+                    { name: '💰 Total Price', value: `${result.purchase.totalPrice} $CASH`, inline: true },
+                    { name: '📅 Date', value: result.purchase.purchaseDate.toLocaleString('en-US'), inline: true },
                     { name: '🏷️ Role', value: ticket.roleName, inline: true },
-                    { name: '🎮 Tipo', value: ticket.eventType.charAt(0).toUpperCase() + ticket.eventType.slice(1), inline: true }
+                    { name: '🎮 Type', value: ticket.eventType.charAt(0).toUpperCase() + ticket.eventType.slice(1), inline: true }
                 );
 
-            // Adicionar números dos tickets se for loteria
+            // Add ticket numbers if lottery
             if (ticket.eventType === 'lottery' && result.purchase.ticketNumbers) {
                 embed.addFields({
-                    name: '🎲 Números dos Tickets',
+                    name: '🎲 Ticket Numbers',
                     value: result.purchase.ticketNumbers.join(', '),
                     inline: false
                 });
             }
 
-            // Adicionar informações sobre tickets restantes
+            // Add remaining tickets info
             const remainingTickets = ticket.getAvailableTickets();
             embed.addFields({
-                name: '📊 Tickets Restantes',
-                value: `${remainingTickets} de ${ticket.maxTickets}`,
+                name: '📊 Remaining Tickets',
+                value: `${remainingTickets} of ${ticket.maxTickets}`,
                 inline: false
             });
 
-            embed.setFooter({ text: `ID da compra: ${result.purchase._id}` })
+            embed.setFooter({ text: `Purchase ID: ${result.purchase._id}` })
                 .setTimestamp();
 
             await interaction.editReply({
-                content: '✅ Compra realizada com sucesso!',
+                content: '✅ Purchase completed successfully!',
                 embeds: [embed]
             });
 
         } catch (error) {
-            console.error('Erro ao comprar ticket:', error);
+            console.error('Error buying ticket:', error);
             await interaction.editReply({
-                content: `❌ Erro ao comprar ticket: ${error.message}`
+                content: `❌ Error buying ticket: ${error.message}`
             });
         }
     }

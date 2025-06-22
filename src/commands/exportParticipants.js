@@ -54,7 +54,7 @@ module.exports = {
                 const role = guild.roles.cache.get(identifier);
                 if (!role) {
                     return interaction.editReply({
-                        content: `❌ Role com ID ${identifier} não encontrado no servidor.`
+                        content: `❌ Role with ID ${identifier} not found in server.`
                     });
                 }
 
@@ -156,7 +156,7 @@ module.exports = {
                     .setTimestamp();
 
                 await interaction.editReply({
-                    content: '✅ Lista exportada com sucesso!',
+                    content: '✅ List exported successfully!',
                     embeds: [embed],
                     files: [attachment]
                 });
@@ -197,15 +197,15 @@ module.exports = {
                     .setTimestamp();
 
                 await interaction.editReply({
-                    content: '✅ Lista exportada com sucesso!',
+                    content: '✅ List exported successfully!',
                     embeds: [embed]
                 });
             }
 
         } catch (error) {
-            console.error('Erro ao exportar participantes:', error);
+            console.error('Error exporting participants:', error);
             await interaction.editReply({
-                content: `❌ Erro ao exportar participantes: ${error.message}`
+                content: `❌ Error exporting participants: ${error.message}`
             });
         }
     }

@@ -34,7 +34,7 @@ module.exports = {
 
             if (!ticket) {
                 return interaction.editReply({
-                    content: `❌ Ticket de loteria "${ticketName}" não encontrado.`
+                    content: `❌ Lottery ticket "${ticketName}" not found.`
                 });
             }
 
@@ -107,9 +107,9 @@ module.exports = {
             await interaction.editReply({ embeds: [embed] });
 
         } catch (error) {
-            console.error('Erro ao realizar sorteio:', error);
+            console.error('Error drawing lottery:', error);
             await interaction.editReply({
-                content: `❌ Erro ao realizar sorteio: ${error.message}`
+                content: `❌ Error drawing lottery: ${error.message}`
             });
         }
     }

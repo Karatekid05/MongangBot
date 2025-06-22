@@ -55,7 +55,7 @@ module.exports = {
 
             if (!ticket) {
                 return interaction.editReply({
-                    content: `❌ Ticket "${ticketName}" não encontrado.`
+                    content: `❌ Ticket "${ticketName}" not found.`
                 });
             }
 
@@ -134,20 +134,20 @@ module.exports = {
                         embed.addFields({
                             name: '🗑️ Ação: Deletar Completamente',
                             value: '⚠️ **ATENÇÃO:** Esta ação é irreversível!\n\n' +
-                                   '• Ticket será removido permanentemente\n' +
-                                   '• Todas as compras serão deletadas\n' +
-                                   '• Histórico será perdido\n' +
-                                   '• Roles serão removidos (se configurado)',
+                                '• Ticket será removido permanentemente\n' +
+                                '• Todas as compras serão deletadas\n' +
+                                '• Histórico será perdido\n' +
+                                '• Roles serão removidos (se configurado)',
                             inline: false
                         });
                     } else if (action === 'refund') {
                         embed.addFields({
                             name: '💰 Ação: Cancelar e Reembolsar',
                             value: '✅ **SEGURO:** Esta ação reembolsa os usuários!\n\n' +
-                                   '• Ticket será cancelado\n' +
-                                   '• Todos receberão reembolso\n' +
-                                   '• Roles serão removidos\n' +
-                                   '• Histórico será mantido',
+                                '• Ticket será cancelado\n' +
+                                '• Todos receberão reembolso\n' +
+                                '• Roles serão removidos\n' +
+                                '• Histórico será mantido',
                             inline: false
                         });
                     }
@@ -175,10 +175,10 @@ module.exports = {
                                     const member = await guild.members.fetch(purchase.userId);
                                     if (member && member.roles.cache.has(ticket.roleId)) {
                                         await member.roles.remove(ticket.roleId);
-                                        console.log(`Role removido de ${purchase.username} durante delete`);
+                                        console.log(`Role removed from ${purchase.username} during delete`);
                                     }
                                 } catch (error) {
-                                    console.error(`Erro ao remover role de ${purchase.username}:`, error);
+                                    console.error(`Error removing role from ${purchase.username}:`, error);
                                 }
                             }
                         }
@@ -186,7 +186,7 @@ module.exports = {
 
                     // Deletar todas as compras
                     await TicketPurchase.deleteMany({ ticketId: ticket._id });
-                    
+
                     // Deletar o ticket
                     await Ticket.deleteOne({ _id: ticket._id });
 
@@ -196,14 +196,14 @@ module.exports = {
                 } else if (action === 'refund') {
                     // Cancelar e reembolsar
                     const { awardCash } = require('../utils/pointsManager');
-                    
+
                     let refundedCount = 0;
                     for (const purchase of activePurchases) {
                         try {
                             await awardCash(purchase.userId, 'ticket_refund', purchase.totalPrice);
                             refundedCount++;
                         } catch (error) {
-                            console.error(`Erro ao reembolsar ${purchase.username}:`, error);
+                            console.error(`Error reimbursing ${purchase.username}:`, error);
                         }
                     }
 
@@ -218,7 +218,7 @@ module.exports = {
                                         await member.roles.remove(ticket.roleId);
                                     }
                                 } catch (error) {
-                                    console.error(`Erro ao remover role de ${purchase.username}:`, error);
+                                    console.error(`Error removing role from ${purchase.username}:`, error);
                                 }
                             }
                         }
@@ -274,19 +274,19 @@ module.exports = {
             switch (action) {
                 case 'pause':
                     newStatus = 'paused';
-                    actionText = 'pausado';
+                    actionText = 'paused';
                     break;
                 case 'activate':
                     newStatus = 'active';
-                    actionText = 'ativado';
+                    actionText = 'activated';
                     break;
                 case 'cancel':
                     newStatus = 'cancelled';
-                    actionText = 'cancelado';
+                    actionText = 'canceled';
                     break;
                 case 'complete':
                     newStatus = 'completed';
-                    actionText = 'completado';
+                    actionText = 'completed';
                     break;
                 default:
                     return interaction.editReply({
@@ -319,14 +319,14 @@ module.exports = {
                 .setTimestamp();
 
             await interaction.editReply({
-                content: `✅ Ticket ${actionText} com sucesso!`,
+                content: `✅ Ticket ${actionText} successfully!`,
                 embeds: [embed]
             });
 
         } catch (error) {
-            console.error('Erro ao gerenciar ticket:', error);
+            console.error('Error managing ticket:', error);
             await interaction.editReply({
-                content: `❌ Erro ao gerenciar ticket: ${error.message}`
+                content: `❌ Error managing ticket: ${error.message}`
             });
         }
     }

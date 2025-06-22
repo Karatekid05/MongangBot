@@ -94,7 +94,7 @@ module.exports = {
             const role = guild.roles.cache.get(roleId);
             if (!role) {
                 return interaction.editReply({
-                    content: `❌ Role com ID "${roleId}" não encontrado no servidor.`
+                    content: `❌ Role with ID "${roleId}" not found in server.`
                 });
             }
 
@@ -151,21 +151,21 @@ module.exports = {
 
             const embed = new EmbedBuilder()
                 .setColor('#00FF00')
-                .setTitle('✅ Ticket Criado com Sucesso!')
+                .setTitle('✅ Ticket Created Successfully!')
                 .setDescription(`**${name}**`)
                 .addFields(
-                    { name: '📝 Descrição', value: description, inline: false },
-                    { name: '💰 Preço', value: `${price} $CASH`, inline: true },
-                    { name: '🎫 Máximo', value: maxTickets.toString(), inline: true },
-                    { name: '👤 Por Usuário', value: maxPerUser.toString(), inline: true },
+                    { name: '📝 Description', value: description, inline: false },
+                    { name: '💰 Price', value: `${price} $CASH`, inline: true },
+                    { name: '🎫 Maximum', value: maxTickets.toString(), inline: true },
+                    { name: '👤 Per User', value: maxPerUser.toString(), inline: true },
                     { name: '🏷️ Role', value: roleName, inline: true },
-                    { name: '🎮 Tipo', value: eventType.charAt(0).toUpperCase() + eventType.slice(1), inline: true },
-                    { name: '⚙️ Auto-assign Role', value: autoAssignRole ? 'Sim' : 'Não', inline: true }
+                    { name: '🎮 Type', value: eventType.charAt(0).toUpperCase() + eventType.slice(1), inline: true },
+                    { name: '⚙️ Auto-assign Role', value: autoAssignRole ? 'Yes' : 'No', inline: true }
                 );
 
             if (timeLimitDate) {
                 embed.addFields({
-                    name: '⏰ Data Limite',
+                    name: '⏰ Time Limit',
                     value: parsedTimeLimit.toLocaleString('pt-BR'),
                     inline: true
                 });
@@ -173,7 +173,7 @@ module.exports = {
 
             if (eventType === 'lottery' && lotteryConfig) {
                 embed.addFields({
-                    name: '🎲 Prêmio da Loteria',
+                    name: '🎲 Lottery Prize',
                     value: `${lotteryConfig.prizePool} $CASH`,
                     inline: true
                 });
@@ -183,14 +183,14 @@ module.exports = {
                 .setTimestamp();
 
             await interaction.editReply({
-                content: `✅ Ticket "${name}" criado com sucesso!`,
+                content: `✅ Ticket "${name}" created successfully!`,
                 embeds: [embed]
             });
 
         } catch (error) {
-            console.error('Erro ao criar ticket:', error);
+            console.error('Error creating ticket:', error);
             await interaction.editReply({
-                content: `❌ Erro ao criar ticket: ${error.message}`
+                content: `❌ Error creating ticket: ${error.message}`
             });
         }
     }

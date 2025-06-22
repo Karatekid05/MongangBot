@@ -4,47 +4,47 @@ const User = require('../models/User');
 const { awardCash, removeCash } = require('./pointsManager');
 
 /**
- * Criar um novo ticket/evento
+ * Create a new ticket/event
  */
 async function createTicket(ticketData) {
     try {
         const ticket = new Ticket(ticketData);
         await ticket.save();
-        console.log(`Ticket criado: ${ticket.name}`);
+        console.log(`Ticket created: ${ticket.name}`);
         return ticket;
     } catch (error) {
-        console.error('Erro ao criar ticket:', error);
+        console.error('Error creating ticket:', error);
         throw error;
     }
 }
 
 /**
- * Comprar tickets
+ * Buy tickets
  */
 async function buyTickets(ticketId, userId, username, quantity, client) {
     try {
-        // Buscar o ticket
+        // Find the ticket
         const ticket = await Ticket.findById(ticketId);
         if (!ticket) {
-            throw new Error('Ticket não encontrado');
+            throw new Error('Ticket not found');
         }
 
-        // Verificar se o ticket está ativo
+        // Check if ticket is active
         if (ticket.status !== 'active') {
-            throw new Error('Ticket não está disponível para compra');
+            throw new Error('Ticket is not available for purchase');
         }
 
-        // Verificar se há tickets disponíveis
+        // Check if tickets are available
         if (!ticket.hasAvailableTickets()) {
-            throw new Error('Não há tickets disponíveis');
+            throw new Error('No tickets available');
         }
 
-        // Verificar se há tickets suficientes
+        // Check if there are enough tickets
         if (ticket.soldTickets + quantity > ticket.maxTickets) {
-            throw new Error(`Só há ${ticket.getAvailableTickets()} tickets disponíveis`);
+            throw new Error(`Only ${ticket.getAvailableTickets()} tickets available`);
         }
 
-        // Verificar se o usuário já comprou o máximo permitido
+        // Check if user already bought the maximum allowed
         const userPurchases = await TicketPurchase.find({
             ticketId: ticket._id,
             userId: userId,
@@ -53,26 +53,26 @@ async function buyTickets(ticketId, userId, username, quantity, client) {
 
         const totalUserTickets = userPurchases.reduce((sum, purchase) => sum + purchase.quantity, 0);
         if (totalUserTickets + quantity > ticket.settings.maxTicketsPerUser) {
-            throw new Error(`Você já comprou ${totalUserTickets} tickets. Máximo permitido: ${ticket.settings.maxTicketsPerUser}`);
+            throw new Error(`You already bought ${totalUserTickets} tickets. Maximum allowed: ${ticket.settings.maxTicketsPerUser}`);
         }
 
-        // Calcular preço total
+        // Calculate total price
         const totalPrice = ticket.price * quantity;
 
-        // Verificar se o usuário tem $CASH suficiente
+        // Check if user has enough $CASH
         const user = await User.findOne({ userId });
         if (!user) {
-            throw new Error('Usuário não encontrado no sistema');
+            throw new Error('User not found in system');
         }
 
         if (user.cash < totalPrice) {
-            throw new Error(`Você precisa de ${totalPrice} $CASH. Você tem: ${user.cash} $CASH`);
+            throw new Error(`You need ${totalPrice} $CASH. You have: ${user.cash} $CASH`);
         }
 
-        // Remover $CASH do usuário
+        // Remove $CASH from user
         await removeCash(userId, 'ticket_purchase', totalPrice);
 
-        // Criar registro da compra
+        // Create purchase record
         const purchase = new TicketPurchase({
             ticketId: ticket._id,
             userId: userId,
@@ -82,7 +82,7 @@ async function buyTickets(ticketId, userId, username, quantity, client) {
             roleId: ticket.roleId
         });
 
-        // Gerar números dos tickets (para loterias)
+        // Generate ticket numbers (for lotteries)
         if (ticket.eventType === 'lottery') {
             const ticketNumbers = [];
             for (let i = 0; i < quantity; i++) {
@@ -93,11 +93,11 @@ async function buyTickets(ticketId, userId, username, quantity, client) {
 
         await purchase.save();
 
-        // Atualizar contador de tickets vendidos
+        // Update sold tickets counter
         ticket.soldTickets += quantity;
         await ticket.save();
 
-        // Atribuir role automaticamente se configurado
+        // Assign role automatically if configured
         if (ticket.settings.autoAssignRole) {
             try {
                 const guild = client.guilds.cache.get(process.env.DISCORD_GUILD_ID);
@@ -107,53 +107,53 @@ async function buyTickets(ticketId, userId, username, quantity, client) {
                         await member.roles.add(ticket.roleId);
                         purchase.roleAssigned = true;
                         await purchase.save();
-                        console.log(`Role ${ticket.roleName} atribuído a ${username}`);
+                        console.log(`Role ${ticket.roleName} assigned to ${username}`);
                     }
                 }
             } catch (roleError) {
-                console.error(`Erro ao atribuir role para ${username}:`, roleError);
+                console.error(`Error assigning role to ${username}:`, roleError);
             }
         }
 
-        console.log(`${username} comprou ${quantity} tickets de ${ticket.name} por ${totalPrice} $CASH`);
+        console.log(`${username} bought ${quantity} tickets for ${ticket.name} for ${totalPrice} $CASH`);
         return { ticket, purchase };
 
     } catch (error) {
-        console.error('Erro ao comprar tickets:', error);
+        console.error('Error buying tickets:', error);
         throw error;
     }
 }
 
 /**
- * Listar todos os tickets ativos
+ * List all active tickets
  */
 async function listActiveTickets() {
     try {
         const tickets = await Ticket.find({ status: 'active' }).sort({ createdAt: -1 });
         return tickets;
     } catch (error) {
-        console.error('Erro ao listar tickets:', error);
+        console.error('Error listing tickets:', error);
         throw error;
     }
 }
 
 /**
- * Obter detalhes de um ticket
+ * Get ticket details
  */
 async function getTicketDetails(ticketId) {
     try {
         const ticket = await Ticket.findById(ticketId);
         if (!ticket) {
-            throw new Error('Ticket não encontrado');
+            throw new Error('Ticket not found');
         }
 
-        // Buscar compras ativas
+        // Find active purchases
         const purchases = await TicketPurchase.find({
             ticketId: ticket._id,
             status: 'active'
         });
 
-        // Calcular estatísticas
+        // Calculate statistics
         const totalParticipants = new Set(purchases.map(p => p.userId)).size;
         const totalRevenue = ticket.getTotalRevenue();
 
@@ -166,44 +166,44 @@ async function getTicketDetails(ticketId) {
             }
         };
     } catch (error) {
-        console.error('Erro ao obter detalhes do ticket:', error);
+        console.error('Error getting ticket details:', error);
         throw error;
     }
 }
 
 /**
- * Realizar sorteio de loteria
+ * Draw lottery
  */
 async function drawLottery(ticketId, client) {
     try {
         const ticket = await Ticket.findById(ticketId);
         if (!ticket) {
-            throw new Error('Ticket não encontrado');
+            throw new Error('Ticket not found');
         }
 
         if (ticket.eventType !== 'lottery') {
-            throw new Error('Este ticket não é uma loteria');
+            throw new Error('This ticket is not a lottery');
         }
 
         if (ticket.lottery.drawn) {
-            throw new Error('O sorteio já foi realizado');
+            throw new Error('Lottery has already been drawn');
         }
 
-        // Buscar todos os participantes
+        // Find all participants
         const purchases = await TicketPurchase.find({
             ticketId: ticket._id,
             status: 'active'
         });
 
         if (purchases.length === 0) {
-            throw new Error('Não há participantes para o sorteio');
+            throw new Error('No participants for the lottery');
         }
 
-        // Criar array de participantes para sorteio
+        // Create participants array for drawing
         const participants = [];
         purchases.forEach(purchase => {
             if (purchase.ticketNumbers) {
-                // Para loterias com números específicos
+                // For lotteries with specific numbers
                 purchase.ticketNumbers.forEach(ticketNumber => {
                     participants.push({
                         userId: purchase.userId,
@@ -212,7 +212,7 @@ async function drawLottery(ticketId, client) {
                     });
                 });
             } else {
-                // Para loterias simples
+                // For simple lotteries
                 participants.push({
                     userId: purchase.userId,
                     username: purchase.username
@@ -220,7 +220,7 @@ async function drawLottery(ticketId, client) {
             }
         });
 
-        // Realizar sorteio
+        // Draw lottery
         const winners = [];
         const prizeDistribution = [
             { position: 1, percentage: 0.5 },
@@ -241,31 +241,31 @@ async function drawLottery(ticketId, client) {
                 ticketNumber: winner.ticketNumber
             });
 
-            // Dar prêmio ao vencedor
+            // Give prize to winner
             if (prize > 0) {
                 await awardCash(winner.userId, 'lottery_prize', prize);
-                console.log(`${winner.username} ganhou ${prize} $CASH na loteria ${ticket.name}`);
+                console.log(`${winner.username} won ${prize} $CASH in lottery ${ticket.name}`);
             }
         }
 
-        // Atualizar ticket com resultados
+        // Update ticket with results
         ticket.lottery.winners = winners;
         ticket.lottery.drawn = true;
         ticket.lottery.drawDate = new Date();
         ticket.status = 'completed';
         await ticket.save();
 
-        console.log(`Sorteio da loteria ${ticket.name} realizado com ${winners.length} vencedores`);
+        console.log(`Lottery ${ticket.name} drawn with ${winners.length} winners`);
         return { ticket, winners };
 
     } catch (error) {
-        console.error('Erro ao realizar sorteio:', error);
+        console.error('Error drawing lottery:', error);
         throw error;
     }
 }
 
 /**
- * Exportar participantes por role
+ * Export participants by role
  */
 async function getParticipantsByRole(roleId) {
     try {
@@ -285,52 +285,52 @@ async function getParticipantsByRole(roleId) {
 
         return participants;
     } catch (error) {
-        console.error('Erro ao buscar participantes por role:', error);
+        console.error('Error finding participants by role:', error);
         throw error;
     }
 }
 
 /**
- * Exportar lista de participantes
+ * Export participants list
  */
 async function exportParticipantsList(roleId) {
     try {
         const participants = await getParticipantsByRole(roleId);
-
+        
         if (participants.length === 0) {
-            return 'Nenhum participante encontrado para este role.';
+            return 'No participants found for this role.';
         }
 
-        const csvHeader = 'Username,User ID,Quantidade,Preço Total,Data da Compra,Ticket\n';
-        const csvRows = participants.map(p =>
-            `"${p.username}","${p.userId}",${p.quantity},${p.totalPrice},"${p.purchaseDate.toLocaleString('pt-BR')}","${p.ticketName}"`
+        const csvHeader = 'Username,User ID,Quantity,Total Price,Purchase Date,Ticket\n';
+        const csvRows = participants.map(p => 
+            `"${p.username}","${p.userId}",${p.quantity},${p.totalPrice},"${p.purchaseDate.toLocaleString('en-US')}","${p.ticketName}"`
         ).join('\n');
 
         return csvHeader + csvRows;
     } catch (error) {
-        console.error('Erro ao exportar participantes:', error);
+        console.error('Error exporting participants:', error);
         throw error;
     }
 }
 
 /**
- * Reembolsar ticket
+ * Refund ticket
  */
 async function refundTicket(purchaseId, reason = 'admin_refund') {
     try {
         const purchase = await TicketPurchase.findById(purchaseId);
         if (!purchase) {
-            throw new Error('Compra não encontrada');
+            throw new Error('Purchase not found');
         }
 
         if (purchase.status !== 'active') {
-            throw new Error('Esta compra não pode ser reembolsada');
+            throw new Error('This purchase cannot be refunded');
         }
 
-        // Reembolsar $CASH
+        // Refund $CASH
         await awardCash(purchase.userId, 'ticket_refund', purchase.totalPrice);
 
-        // Remover role se foi atribuído
+        // Remove role if assigned
         if (purchase.roleAssigned) {
             try {
                 const guild = client.guilds.cache.get(process.env.DISCORD_GUILD_ID);
@@ -338,38 +338,38 @@ async function refundTicket(purchaseId, reason = 'admin_refund') {
                     const member = await guild.members.fetch(purchase.userId);
                     if (member && member.roles.cache.has(purchase.roleId)) {
                         await member.roles.remove(purchase.roleId);
-                        console.log(`Role removido de ${purchase.username} durante reembolso`);
+                        console.log(`Role removed from ${purchase.username} during refund`);
                     }
                 }
             } catch (roleError) {
-                console.error(`Erro ao remover role de ${purchase.username}:`, roleError);
+                console.error(`Error removing role from ${purchase.username}:`, roleError);
             }
         }
 
-        // Marcar como reembolsada
+        // Mark as refunded
         purchase.status = 'refunded';
         purchase.refundReason = reason;
         purchase.refundDate = new Date();
         await purchase.save();
 
-        // Atualizar contador do ticket
+        // Update ticket counter
         const ticket = await Ticket.findById(purchase.ticketId);
         if (ticket) {
             ticket.soldTickets = Math.max(0, ticket.soldTickets - purchase.quantity);
             await ticket.save();
         }
 
-        console.log(`Ticket reembolsado para ${purchase.username}: ${purchase.totalPrice} $CASH`);
+        console.log(`Ticket refunded for ${purchase.username}: ${purchase.totalPrice} $CASH`);
         return purchase;
 
     } catch (error) {
-        console.error('Erro ao reembolsar ticket:', error);
+        console.error('Error refunding ticket:', error);
         throw error;
     }
 }
 
 /**
- * Verificar e marcar tickets expirados como pre-delete
+ * Check and mark expired tickets as pre-delete
  */
 async function checkExpiredTickets() {
     try {
@@ -380,25 +380,25 @@ async function checkExpiredTickets() {
         });
 
         for (const ticket of expiredTickets) {
-            console.log(`Ticket ${ticket.name} expirou, marcando como pre-delete`);
+            console.log(`Ticket ${ticket.name} expired, marking as pre-delete`);
             await ticket.markAsPreDelete();
         }
 
         return expiredTickets.length;
     } catch (error) {
-        console.error('Erro ao verificar tickets expirados:', error);
+        console.error('Error checking expired tickets:', error);
         throw error;
     }
 }
 
 /**
- * Remover roles de um ticket
+ * Remove roles from a ticket
  */
 async function removeTicketRoles(ticketId, client) {
     try {
         const ticket = await Ticket.findById(ticketId);
         if (!ticket) {
-            throw new Error('Ticket não encontrado');
+            throw new Error('Ticket not found');
         }
 
         const purchases = await TicketPurchase.find({
@@ -408,7 +408,7 @@ async function removeTicketRoles(ticketId, client) {
 
         let removedCount = 0;
         const guild = client.guilds.cache.get(process.env.DISCORD_GUILD_ID);
-
+        
         if (guild) {
             for (const purchase of purchases) {
                 try {
@@ -416,19 +416,19 @@ async function removeTicketRoles(ticketId, client) {
                     if (member && member.roles.cache.has(ticket.roleId)) {
                         await member.roles.remove(ticket.roleId);
                         removedCount++;
-                        console.log(`Role removido de ${purchase.username}`);
+                        console.log(`Role removed from ${purchase.username}`);
                     }
                 } catch (error) {
-                    console.error(`Erro ao remover role de ${purchase.username}:`, error);
+                    console.error(`Error removing role from ${purchase.username}:`, error);
                 }
             }
         }
 
-        console.log(`${removedCount} roles removidos do ticket ${ticket.name}`);
+        console.log(`${removedCount} roles removed from ticket ${ticket.name}`);
         return removedCount;
 
     } catch (error) {
-        console.error('Erro ao remover roles do ticket:', error);
+        console.error('Error removing ticket roles:', error);
         throw error;
     }
 }

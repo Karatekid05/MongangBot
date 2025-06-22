@@ -4,7 +4,7 @@ const { listActiveTickets } = require('../utils/ticketManager');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('tickets')
-        .setDescription('Listar tickets/eventos disponíveis'),
+        .setDescription('List available tickets/events'),
 
     async execute(interaction, client) {
         await interaction.deferReply();
@@ -15,8 +15,8 @@ module.exports = {
             if (tickets.length === 0) {
                 const embed = new EmbedBuilder()
                     .setColor('#FF6B6B')
-                    .setTitle('🎫 Tickets Disponíveis')
-                    .setDescription('Não há tickets disponíveis no momento.')
+                    .setTitle('🎫 Available Tickets')
+                    .setDescription('No tickets available at the moment.')
                     .setTimestamp();
 
                 return interaction.editReply({ embeds: [embed] });
@@ -24,10 +24,10 @@ module.exports = {
 
             const embed = new EmbedBuilder()
                 .setColor('#4ECDC4')
-                .setTitle('🎫 Tickets Disponíveis')
-                .setDescription(`**${tickets.length}** tickets ativos`);
+                .setTitle('🎫 Available Tickets')
+                .setDescription(`**${tickets.length}** active tickets`);
 
-            // Adicionar cada ticket como um campo
+            // Add each ticket as a field
             tickets.forEach((ticket, index) => {
                 const status = ticket.status === 'active' ? '🟢' : '🔴';
                 const availableTickets = ticket.getAvailableTickets();
@@ -35,29 +35,29 @@ module.exports = {
 
                 const fieldValue = [
                     `📝 **${ticket.description}**`,
-                    `💰 **Preço:** ${ticket.price} $CASH`,
-                    `🎫 **Disponíveis:** ${availableTickets}/${ticket.maxTickets} (${soldPercentage}% vendidos)`,
-                    `👤 **Máximo por usuário:** ${ticket.settings.maxTicketsPerUser}`,
+                    `💰 **Price:** ${ticket.price} $CASH`,
+                    `🎫 **Available:** ${availableTickets}/${ticket.maxTickets} (${soldPercentage}% sold)`,
+                    `👤 **Max per user:** ${ticket.settings.maxTicketsPerUser}`,
                     `🏷️ **Role:** ${ticket.roleName}`,
-                    `🎮 **Tipo:** ${ticket.eventType.charAt(0).toUpperCase() + ticket.eventType.slice(1)}`,
-                    `📅 **Criado:** ${ticket.createdAt.toLocaleDateString('pt-BR')}`
+                    `🎮 **Type:** ${ticket.eventType.charAt(0).toUpperCase() + ticket.eventType.slice(1)}`,
+                    `📅 **Created:** ${ticket.createdAt.toLocaleDateString('en-US')}`
                 ];
 
-                // Adicionar data limite se existir
+                // Add time limit if exists
                 if (ticket.timeLimitDate) {
                     const timeLeft = ticket.timeLimitDate - new Date();
                     if (timeLeft > 0) {
                         const hours = Math.floor(timeLeft / (1000 * 60 * 60));
                         const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-                        fieldValue.push(`⏰ **Expira em:** ${hours}h ${minutes}m`);
+                        fieldValue.push(`⏰ **Expires in:** ${hours}h ${minutes}m`);
                     } else {
-                        fieldValue.push(`⏰ **Expirado:** ${ticket.timeLimitDate.toLocaleString('pt-BR')}`);
+                        fieldValue.push(`⏰ **Expired:** ${ticket.timeLimitDate.toLocaleString('en-US')}`);
                     }
                 }
 
-                // Adicionar prêmio para loterias
+                // Add prize for lotteries
                 if (ticket.eventType === 'lottery' && ticket.lottery) {
-                    fieldValue.push(`🎲 **Prêmio:** ${ticket.lottery.prizePool} $CASH`);
+                    fieldValue.push(`🎲 **Prize:** ${ticket.lottery.prizePool} $CASH`);
                 }
 
                 embed.addFields({
@@ -67,15 +67,15 @@ module.exports = {
                 });
             });
 
-            embed.setFooter({ text: 'Use /buyticket <nome> para comprar' })
+            embed.setFooter({ text: 'Use /buyticket <name> to buy' })
                 .setTimestamp();
 
             await interaction.editReply({ embeds: [embed] });
 
         } catch (error) {
-            console.error('Erro ao listar tickets:', error);
+            console.error('Error listing tickets:', error);
             await interaction.editReply({
-                content: `❌ Erro ao listar tickets: ${error.message}`
+                content: `❌ Error listing tickets: ${error.message}`
             });
         }
     }
