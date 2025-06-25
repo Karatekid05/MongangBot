@@ -70,7 +70,7 @@ async function buyTickets(ticketId, userId, username, quantity, client) {
         }
 
         // Remove $CASH from user
-        await removeCash(userId, 'ticket_purchase', totalPrice);
+        await removeCash(userId, totalPrice, 'ticket_purchase');
 
         // Create purchase record
         const purchase = new TicketPurchase({
@@ -395,6 +395,56 @@ async function checkExpiredTickets() {
 }
 
 /**
+ * Check time limits for tickets
+ */
+async function checkTimeLimits() {
+    try {
+        const now = new Date();
+        const ticketsToCheck = await Ticket.find({
+            status: 'active',
+            timeLimitDate: { $exists: true, $ne: null }
+        });
+
+        let expiredCount = 0;
+        for (const ticket of ticketsToCheck) {
+            if (ticket.timeLimitDate && ticket.timeLimitDate < now) {
+                console.log(`Ticket ${ticket.name} has expired, marking as pre-delete`);
+                await ticket.markAsPreDelete();
+                expiredCount++;
+            }
+        }
+
+        if (expiredCount > 0) {
+            console.log(`${expiredCount} tickets expired and marked as pre-delete`);
+        }
+
+        return expiredCount;
+    } catch (error) {
+        console.error('Error checking time limits:', error);
+        throw error;
+    }
+}
+
+/**
+ * Check and reset tickets based on auto-reset settings
+ */
+async function checkAndResetTickets(client) {
+    try {
+        // This function can be expanded to handle automatic resets
+        // For now, it just checks expired tickets
+        const expiredCount = await checkExpiredTickets();
+
+        // Future: Add automatic reset logic for daily/weekly/monthly tickets
+        // Example: Reset lottery tickets daily, tournament tickets weekly, etc.
+
+        return expiredCount;
+    } catch (error) {
+        console.error('Error checking and resetting tickets:', error);
+        throw error;
+    }
+}
+
+/**
  * Remove roles from a ticket
  */
 async function removeTicketRoles(ticketId, client) {
@@ -446,5 +496,7 @@ module.exports = {
     exportParticipantsList,
     refundTicket,
     checkExpiredTickets,
+    checkTimeLimits,
+    checkAndResetTickets,
     removeTicketRoles
 }; 

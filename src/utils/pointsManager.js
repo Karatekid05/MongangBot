@@ -335,10 +335,9 @@ async function removeCash(userId, amount, source = 'others') {
             };
         }
 
-        // Remove points (don't go below 0)
+        // Remove points ONLY from total cash (not weekly cash)
         const prevCash = user.cash;
         user.cash = Math.max(0, user.cash - amount);
-        user.weeklyCash = Math.max(0, user.weeklyCash - amount);
 
         // Calculate actual amount removed (in case user had less than amount)
         const actualAmountRemoved = prevCash - user.cash;
@@ -347,7 +346,7 @@ async function removeCash(userId, amount, source = 'others') {
         if (!isProportional && user.pointsBySource[source] !== undefined) {
             // Remove from specific source
             user.pointsBySource[source] = Math.max(0, user.pointsBySource[source] - actualAmountRemoved);
-            user.weeklyPointsBySource[source] = Math.max(0, user.weeklyPointsBySource[source] - actualAmountRemoved);
+            // NOT removing from weeklyPointsBySource to preserve weekly cash
         } else {
             // Distribute removal proportionally across sources
             const sources = Object.keys(user.pointsBySource);
@@ -400,11 +399,7 @@ async function removeCash(userId, amount, source = 'others') {
                     user.pointsBySource[src] -= finalAmount;
                     remainingToRemove -= finalAmount;
 
-                    // Atualizar também o semanal
-                    if (user.weeklyPointsBySource[src] > 0) {
-                        const weeklyAmount = Math.min(user.weeklyPointsBySource[src], finalAmount);
-                        user.weeklyPointsBySource[src] -= weeklyAmount;
-                    }
+                    // NOT removing from weeklyPointsBySource to preserve weekly cash
                 }
             }
 
@@ -416,10 +411,7 @@ async function removeCash(userId, amount, source = 'others') {
                         user.pointsBySource[src] -= finalAmount;
                         remainingToRemove -= finalAmount;
 
-                        if (user.weeklyPointsBySource[src] > 0) {
-                            const weeklyAmount = Math.min(user.weeklyPointsBySource[src], finalAmount);
-                            user.weeklyPointsBySource[src] -= weeklyAmount;
-                        }
+                        // NOT removing from weeklyPointsBySource to preserve weekly cash
 
                         if (remainingToRemove <= 0) break;
                     }
