@@ -394,7 +394,9 @@ async function handleModeratorHelpButton(interaction) {
             {
                 name: '📊 Exporting Data',
                 value: '`/export-leaderboards weekly:[true/false]`\n' +
-                    'Export leaderboards to Google Sheets. Use the weekly flag to choose between weekly and all-time stats.'
+                    'Export leaderboards to Google Sheets. Use the weekly flag to choose between weekly and all-time stats.\n\n' +
+                    '`/exportusers`\n' +
+                    'Export all server users to Excel file, organized by role hierarchy (highest roles first).'
             },
             {
                 name: '🔄 Weekly Stats Reset',
