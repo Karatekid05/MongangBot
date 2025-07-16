@@ -15,7 +15,8 @@ module.exports = {
                     { name: 'Sea Kings', value: 'Sea Kings' },
                     { name: 'Thunder Birds', value: 'Thunder Birds' },
                     { name: 'Fluffy Ninjas', value: 'Fluffy Ninjas' },
-                    { name: 'Chunky Cats', value: 'Chunky Cats' }
+                    { name: 'Chunky Cats', value: 'Chunky Cats' },
+                    { name: 'Mad Gang', value: 'Mad Gang' }
                 ))
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
 

@@ -27,6 +27,11 @@ const GANGS = [
         name: 'Chunky Cats',
         roleId: '1353403626168516668', // Chunky Cats role ID
         channelId: '1349463663949516951' // Chunky Cats channel ID
+    },
+    {
+        name: 'Mad Gang',
+        roleId: '1395161421507072033', // Mad Gang role ID
+        channelId: '1395166171694764113' // Mad Gang channel ID - NEEDS TO BE UPDATED
     }
 ];
 

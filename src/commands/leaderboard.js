@@ -16,7 +16,8 @@ module.exports = {
                     { name: 'Sea Kings', value: 'seakings' },
                     { name: 'Thunder Birds', value: 'thunderbirds' },
                     { name: 'Fluffy Ninjas', value: 'fluffyninjas' },
-                    { name: 'Chunky Cats', value: 'chunkycats' }
+                    { name: 'Chunky Cats', value: 'chunkycats' },
+                    { name: 'Mad Gang', value: 'madgang' }
                 ))
         .addBooleanOption(option =>
             option.setName('weekly')
@@ -50,6 +51,9 @@ module.exports = {
                 break;
             case 'chunkycats':
                 embed = await getGangMembersLeaderboard('Chunky Cats', isWeekly);
+                break;
+            case 'madgang':
+                embed = await getGangMembersLeaderboard('Mad Gang', isWeekly);
                 break;
             default:
                 embed = new EmbedBuilder()
