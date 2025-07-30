@@ -13,7 +13,7 @@ const { initializeGangs } = require('./utils/initializeGangs');
 const { initializeUsers } = require('./utils/initializeUsers');
 const { exportLeaderboards } = require('./utils/googleSheets');
 const { checkAllUsersNfts } = require('./utils/monadNftChecker');
-const { GANGS } = require('./utils/constants');
+const { GANGS, MAD_GANG_ROLE_ID, getUserGangWithPriority, getUserGangRoles } = require('./utils/constants');
 const { isModerator } = require('./utils/permissions');
 const User = require('./models/User');
 const Gang = require('./models/Gang');
@@ -154,83 +154,124 @@ client.on('userUpdate', async (oldUser, newUser) => {
     }
 });
 
-// Update user's gang when roles change
+// Update user's gang when roles change with Mad Gang priority and exclusivity
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
-    if (oldMember.roles.cache.size === newMember.roles.cache.size) return;
+    // Skip if no role changes
+    if (oldMember.roles.cache.size === newMember.roles.cache.size) {
+        // Check if it's just a role swap (same count but different roles)
+        const oldRoles = new Set(oldMember.roles.cache.keys());
+        const newRoles = new Set(newMember.roles.cache.keys());
+        const hasChanges = [...oldRoles].some(role => !newRoles.has(role)) || 
+                          [...newRoles].some(role => !oldRoles.has(role));
+        if (!hasChanges) return;
+    }
 
     try {
-        // Verificar se houve mudança de gang
-        let oldGang = null;
-        let newGang = null;
+        console.log(`Processing role change for ${newMember.user.username}`);
+        
+        // Get old and new gang roles
+        const oldGangRoles = getUserGangRoles(oldMember);
+        const newGangRoles = getUserGangRoles(newMember);
+        
+        console.log(`Old gang roles: [${oldGangRoles.join(', ')}], New gang roles: [${newGangRoles.join(', ')}]`);
 
-        // Encontrar a gang antiga (se o usuário tinha antes e não tem mais)
-        for (const gang of GANGS) {
-            if (oldMember.roles.cache.has(gang.roleId) && !newMember.roles.cache.has(gang.roleId)) {
-                oldGang = gang;
-                break;
+        // EXCLUSIVE ROLE MANAGEMENT: If user has Mad Gang role, remove all other gang roles
+        if (newGangRoles.includes(MAD_GANG_ROLE_ID) && newGangRoles.length > 1) {
+            console.log(`User ${newMember.user.username} has Mad Gang + other gang roles. Removing other gang roles...`);
+            
+            for (const roleId of newGangRoles) {
+                if (roleId !== MAD_GANG_ROLE_ID) {
+                    try {
+                        await newMember.roles.remove(roleId);
+                        console.log(`Removed role ${roleId} from ${newMember.user.username} (Mad Gang exclusivity)`);
+                    } catch (roleError) {
+                        console.error(`Failed to remove role ${roleId} from ${newMember.user.username}:`, roleError);
+                    }
+                }
+            }
+            
+            // Update the newGangRoles to reflect changes
+            const updatedMember = await newMember.guild.members.fetch(newMember.id);
+            const finalGangRoles = getUserGangRoles(updatedMember);
+            console.log(`Final gang roles after cleanup: [${finalGangRoles.join(', ')}]`);
+        }
+        
+        // If user has multiple non-Mad Gang roles, keep only the first one found
+        else if (!newGangRoles.includes(MAD_GANG_ROLE_ID) && newGangRoles.length > 1) {
+            console.log(`User ${newMember.user.username} has multiple non-Mad Gang roles. Keeping first one only...`);
+            
+            const keepRole = newGangRoles[0]; // Keep first role
+            for (let i = 1; i < newGangRoles.length; i++) {
+                try {
+                    await newMember.roles.remove(newGangRoles[i]);
+                    console.log(`Removed role ${newGangRoles[i]} from ${newMember.user.username} (exclusivity)`);
+                } catch (roleError) {
+                    console.error(`Failed to remove role ${newGangRoles[i]} from ${newMember.user.username}:`, roleError);
+                }
             }
         }
-
-        // Encontrar a nova gang (se o usuário não tinha antes e tem agora)
-        for (const gang of GANGS) {
-            if (!oldMember.roles.cache.has(gang.roleId) && newMember.roles.cache.has(gang.roleId)) {
-                newGang = gang;
-                break;
-            }
+        
+        // Determine current gang with priority system
+        const currentGang = getUserGangWithPriority(newMember);
+        const oldGang = oldGangRoles.length > 0 ? GANGS.find(g => oldGangRoles.includes(g.roleId)) : null;
+        
+        // If no gang change, exit
+        if (oldGang && currentGang && oldGang.roleId === currentGang.roleId) {
+            console.log(`No gang change for ${newMember.user.username}`);
+            return;
         }
 
-        // Se não houve mudança de gang, sair
-        if (!oldGang && !newGang) return;
-
-        // Buscar o usuário no banco de dados
+        // Find or create user in database
         let user = await User.findOne({ userId: newMember.id });
 
         if (user) {
-            // Usuário existente
-            if (newGang && user.gangId !== newGang.roleId) {
-                // Usuário mudando para uma nova gang
-                console.log(`User ${newMember.user.username} changing gang: ${user.gangId} -> ${newGang.roleId}`);
+            // User exists - update gang if changed
+            if (currentGang && user.gangId !== currentGang.roleId) {
+                console.log(`User ${newMember.user.username} changing gang: ${user.gangId} -> ${currentGang.roleId}`);
 
                 const previousGangId = user.gangId;
 
-                // Salvar contribuição atual para a gang antiga
+                // Save current contribution to old gang
                 if (!user.gangContributions) {
                     user.gangContributions = new Map();
                 }
 
-                // Armazenar a contribuição atual na gang anterior
                 const currentContribution = user.gangContributions.get(previousGangId) || 0;
                 user.gangContributions.set(previousGangId, currentContribution + user.cash);
 
                 console.log(`Stored ${user.cash} $CASH as contribution to previous gang ${previousGangId}`);
 
-                // Atualizar a gang nos dados do usuário
+                // Update user's gang
                 user.previousGangId = previousGangId;
-                user.gangId = newGang.roleId;
-
-                // Salvar as alterações
+                user.gangId = currentGang.roleId;
                 await user.save();
 
-                console.log(`Gang updated for ${newMember.user.username}: ${newGang.name}`);
+                console.log(`Gang updated for ${newMember.user.username}: ${currentGang.name}`);
 
-                // Atualizar os totais das duas gangs
+                // Update gang totals
                 await updateGangTotals(previousGangId);
-                await updateGangTotals(newGang.roleId);
+                await updateGangTotals(currentGang.roleId);
             }
-        } else if (newGang) {
-            // Criar novo usuário
+            else if (!currentGang) {
+                // User no longer has any gang role - remove from database
+                console.log(`User ${newMember.user.username} no longer belongs to any gang - removing from database`);
+                await User.deleteOne({ _id: user._id });
+            }
+        } else if (currentGang) {
+            // New user with gang role - create in database
             user = new User({
                 userId: newMember.id,
                 username: newMember.user.username,
-                gangId: newGang.roleId,
+                gangId: currentGang.roleId,
                 cash: 0,
                 weeklyCash: 0,
                 lastMessageReward: new Date(0),
                 gangContributions: new Map()
             });
             await user.save();
-            console.log(`New user created for ${newMember.user.username} in gang ${newGang.name}`);
+            console.log(`New user created for ${newMember.user.username} in gang ${currentGang.name}`);
         }
+
     } catch (error) {
         console.error('Error processing role change:', error);
     }
@@ -273,8 +314,12 @@ client.on('interactionCreate', async interaction => {
             handleModeratorHelpButton(interaction);
         } else if (customId === 'ticket_help') {
             handleTicketHelpButton(interaction);
+        } else if (customId === 'market_help') {
+            handleMarketHelpButton(interaction);
         } else if (customId.startsWith('buy_ticket_')) {
             handleBuyTicketButton(interaction);
+        } else if (customId.startsWith('buy_market_')) {
+            handleBuyMarketButton(interaction);
         }
     } else if (interaction.isAutocomplete()) {
         const command = client.commands.get(interaction.commandName);
@@ -323,6 +368,13 @@ async function handleUserHelpButton(interaction) {
                     '• `/tickets` - See available tickets\n' +
                     '• `/buyticket` - Buy tickets for events\n' +
                     '• Automatic role assignment when you buy tickets'
+            },
+            {
+                name: '🛒 Market System',
+                value: 'Buy exclusive WL and roles with $CASH:\n' +
+                    '• `/market buy` - Buy items from the market\n' +
+                    '• Click buttons in market channel\n' +
+                    '• Permanent or temporary roles available'
             },
             {
                 name: '👛 Register Your Wallet',
@@ -375,6 +427,13 @@ async function handleModeratorHelpButton(interaction) {
                     '`/manageticket` - Manage, pause, or delete tickets\n' +
                     '`/drawlottery` - Draw lottery winners\n' +
                     '`/exportparticipants` - Export participant lists'
+            },
+            {
+                name: '🛒 Market System Management',
+                value: '`/market setup` - Setup market channel\n' +
+                    '`/market add` - Add new market items\n' +
+                    '`/market remove` - Remove market items\n' +
+                    '`/market list` - List all market items'
             },
             {
                 name: '💰 Award $CASH',
@@ -477,6 +536,105 @@ async function handleTicketHelpButton(interaction) {
         .setTimestamp();
 
     await interaction.reply({ embeds: [ticketHelpEmbed], ephemeral: true });
+}
+
+/**
+ * Handle the Market Help button click
+ * @param {ButtonInteraction} interaction 
+ */
+async function handleMarketHelpButton(interaction) {
+    const marketHelpEmbed = new EmbedBuilder()
+        .setColor('#E74C3C')
+        .setTitle('🛒 Market System Guide')
+        .setDescription('Learn how to use the Mongang Market system!')
+        .addFields(
+            {
+                name: '🛒 What is the Market?',
+                value: 'The Market allows you to buy exclusive WL (Whitelist) spots and special roles using your $CASH. Each item gives you a specific role for a set duration.'
+            },
+            {
+                name: '💰 How to Buy',
+                value: '• Use `/market buy` to purchase items directly\n' +
+                    '• Or click the buttons in the market channel\n' +
+                    '• Items are paid with your total $CASH balance\n' +
+                    '• You\'ll receive the role immediately after purchase'
+            },
+            {
+                name: '⏰ Role Duration',
+                value: '• **Permanent roles:** You keep the role forever\n' +
+                    '• **Temporary roles:** Automatically removed after the set time\n' +
+                    '• You\'ll be notified when temporary roles expire'
+            },
+            {
+                name: '📋 Available Commands',
+                value: '• `/market buy` - Buy an item from the market\n' +
+                    '• `/market list` - See all available items (Moderators only)\n' +
+                    '• `/market add` - Add new items (Moderators only)\n' +
+                    '• `/market remove` - Remove items (Moderators only)\n' +
+                    '• `/market setup` - Setup market channel (Moderators only)'
+            },
+            {
+                name: '🔍 Checking Your Balance',
+                value: 'Use `/profile` to see your current $CASH balance before making purchases.'
+            },
+            {
+                name: '📝 Purchase Logs',
+                value: 'All purchases are logged in a private channel for administrators to track and manage.'
+            }
+        )
+        .setFooter({ text: 'MonGang Bot • Market System' })
+        .setTimestamp();
+
+    await interaction.reply({ embeds: [marketHelpEmbed], ephemeral: true });
+}
+
+/**
+ * Handle the Buy Market Item button click
+ * @param {ButtonInteraction} interaction 
+ */
+async function handleBuyMarketButton(interaction) {
+    try {
+        await interaction.deferReply({ ephemeral: true });
+
+        const itemId = interaction.customId.replace('buy_market_', '');
+        const userId = interaction.user.id;
+        const username = interaction.user.username;
+
+        const { buyMarketItem } = require('./utils/marketManager');
+
+        // Buy market item
+        const result = await buyMarketItem(itemId, userId, username, interaction.guild);
+
+        if (result.success) {
+            // Create success embed
+            const embed = new EmbedBuilder()
+                .setColor('#00FF00')
+                .setTitle('🛒 Purchase Successful!')
+                .setDescription(`**${result.itemName}**`)
+                .addFields(
+                    { name: '👤 Buyer', value: username, inline: true },
+                    { name: '💰 Price', value: `${result.price} $CASH`, inline: true },
+                    { name: '⏰ Duration', value: result.duration, inline: true }
+                )
+                .setFooter({ text: 'Market Purchase' })
+                .setTimestamp();
+
+            await interaction.editReply({
+                content: '✅ Purchase completed successfully!',
+                embeds: [embed]
+            });
+        } else {
+            await interaction.editReply({
+                content: `❌ ${result.error}`
+            });
+        }
+
+    } catch (error) {
+        console.error('Error buying market item via button:', error);
+        await interaction.editReply({
+            content: `❌ Error processing purchase: ${error.message}`
+        });
+    }
 }
 
 /**

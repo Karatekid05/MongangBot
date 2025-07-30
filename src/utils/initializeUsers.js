@@ -1,6 +1,6 @@
 const User = require('../models/User');
 const Gang = require('../models/Gang');
-const { GANGS } = require('./constants');
+const { GANGS, getUserGangWithPriority } = require('./constants');
 
 /**
  * Initialize users in the database based on their Discord roles
@@ -47,14 +47,8 @@ async function initializeUsers(client) {
                 continue; // Skip already registered users
             }
 
-            // Determine the member's gang
-            let userGang = null;
-            for (const gang of GANGS) {
-                if (member.roles.cache.has(gang.roleId)) {
-                    userGang = gang;
-                    break;
-                }
-            }
+            // Determine the member's gang (with Mad Gang priority)
+            let userGang = getUserGangWithPriority(member);
 
             // If the member doesn't belong to any gang, we continue
             if (!userGang) continue;

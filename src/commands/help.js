@@ -27,9 +27,15 @@ module.exports = {
             .setStyle(ButtonStyle.Success)
             .setEmoji('🎫');
 
+        const marketHelpButton = new ButtonBuilder()
+            .setCustomId('market_help')
+            .setLabel('Market System')
+            .setStyle(ButtonStyle.Danger)
+            .setEmoji('🛒');
+
         // Create the action row with buttons
         const row = new ActionRowBuilder()
-            .addComponents(userHelpButton, moderatorHelpButton, ticketHelpButton);
+            .addComponents(userHelpButton, moderatorHelpButton, ticketHelpButton, marketHelpButton);
 
         // Create initial embed
         const initialEmbed = new EmbedBuilder()
@@ -39,7 +45,8 @@ module.exports = {
             .addFields(
                 { name: '👤 User Guide', value: 'Learn how to use commands available to all users', inline: true },
                 { name: '🛡️ Moderator Guide', value: 'Learn how to use moderator-only commands', inline: true },
-                { name: '🎫 Ticket System', value: 'Learn about the ticket/event system', inline: true }
+                { name: '🎫 Ticket System', value: 'Learn about the ticket/event system', inline: true },
+                { name: '🛒 Market System', value: 'Learn about the market system', inline: true }
             )
             .setFooter({ text: 'MonGang Bot • Help System' })
             .setTimestamp();

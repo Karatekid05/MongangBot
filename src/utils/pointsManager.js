@@ -1,6 +1,6 @@
 const User = require('../models/User');
 const Gang = require('../models/Gang');
-const { POINTS_PER_MESSAGE, MESSAGE_COOLDOWN_MS, GANGS, ADDITIONAL_CHAT_CHANNELS } = require('./constants');
+const { POINTS_PER_MESSAGE, MESSAGE_COOLDOWN_MS, GANGS, ADDITIONAL_CHAT_CHANNELS, getUserGangWithPriority } = require('./constants');
 const { client } = require('../index'); // Assuming client is imported from index.js
 
 // Role IDs para membros da equipe que não devem ganhar pontos
@@ -54,8 +54,8 @@ async function handleMessagePoints(message) {
         if (!user) {
             // Se for um canal adicional e o usuário não existir, tentar encontrar uma gang
             if (isAdditionalChannel) {
-                // Verificar se o usuário pertence a alguma gang
-                let userGang = GANGS.find(gang => member.roles.cache.has(gang.roleId));
+                // Verificar se o usuário pertence a alguma gang (com prioridade para Mad Gang)
+                let userGang = getUserGangWithPriority(member);
 
                 // Se o usuário não pertencer a nenhuma gang, usar a primeira como padrão
                 if (!userGang && GANGS.length > 0) {
@@ -84,8 +84,8 @@ async function handleMessagePoints(message) {
                     return; // Exit if we can't save the user
                 }
             } else {
-                // Check all gangs to find one the user belongs to
-                let userGang = GANGS.find(gang => member.roles.cache.has(gang.roleId));
+                // Check all gangs to find one the user belongs to (with Mad Gang priority)
+                let userGang = getUserGangWithPriority(member);
 
                 // If user doesn't belong to any gang, check current channel
                 if (!userGang) {

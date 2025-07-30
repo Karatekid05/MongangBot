@@ -47,6 +47,9 @@ module.exports = {
                     case 'Fluffy Ninjas':
                         gangEmoji = '<:FluffyNinjas:1353406382224969903>';
                         break;
+                    case 'Mad Gang':
+                        gangEmoji = '<:Mad:1396833938898685962>';
+                        break;
                     default:
                         gangEmoji = '🏮';
                 }

@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { awardCash } = require('../utils/pointsManager');
-const { AWARD_SOURCES, GANGS } = require('../utils/constants');
+const { AWARD_SOURCES, GANGS, getUserGangWithPriority } = require('../utils/constants');
 const { isModerator } = require('../utils/permissions');
 const User = require('../models/User');
 
@@ -76,8 +76,8 @@ module.exports = {
                     return interaction.editReply(`Could not find member ${targetUser.username} in the server.`);
                 }
 
-                // Check all gangs to find one the user belongs to
-                const userGang = GANGS.find(gang => member.roles.cache.has(gang.roleId));
+                // Check all gangs to find one the user belongs to (with Mad Gang priority)
+                const userGang = getUserGangWithPriority(member);
 
                 if (!userGang) {
                     return interaction.editReply(`${targetUser.username} does not belong to any gang. Assign a gang role to this user first.`);
