@@ -123,55 +123,85 @@ module.exports = {
             // Get market items
             const marketItems = await listMarketItems();
             
-            if (marketItems.length === 0) {
-                return interaction.editReply('❌ No market items available. Add some items first with `/market add`.');
-            }
-
-            // Create market embed
+            // Create marketplace-style embed
             const embed = new EmbedBuilder()
-                .setColor('#4ECDC4')
-                .setTitle('🛒 **MONGANG MARKET**')
-                .setDescription('Welcome to the Mongang Market! Buy exclusive WL and roles with your $CASH.')
-                .setThumbnail(interaction.guild.iconURL())
-                .setTimestamp();
+                .setColor('#2F3136')
+                .setTitle('')
+                .setDescription('')
+                .setThumbnail(null);
 
-            // Add items to embed
-            marketItems.forEach((item, index) => {
-                const durationText = item.durationHours > 0 ? `${item.durationHours}h` : 'Permanent';
-                const fieldValue = [
-                    `💰 **Price:** ${item.price} $CASH`,
-                    `⏰ **Duration:** ${durationText}`,
-                    `📝 **Description:** ${item.description}`
-                ].join('\n');
+            // Create the marketplace header
+            const headerEmbed = new EmbedBuilder()
+                .setColor('#2F3136')
+                .setTitle('')
+                .setDescription('')
+                .setThumbnail(null);
 
-                embed.addFields({
-                    name: `${index + 1}. ${item.name}`,
-                    value: fieldValue,
-                    inline: false
+            // Create the marketplace content
+            const contentEmbed = new EmbedBuilder()
+                .setColor('#2F3136')
+                .setTitle('')
+                .setDescription('')
+                .setThumbnail(null);
+
+            let itemEmbeds = [];
+            let buttons = [];
+            let rows = [];
+
+            if (marketItems.length > 0) {
+                // Add items as individual embeds for better visual separation
+                marketItems.forEach((item, index) => {
+                    const durationText = item.durationHours > 0 ? `${item.durationHours}h` : 'Permanent';
+                    const roleMention = `<@&${item.roleId}>`;
+                    
+                    const itemEmbed = new EmbedBuilder()
+                        .setColor('#2F3136')
+                        .setTitle('')
+                        .setDescription('')
+                        .addFields({
+                            name: `🏪 ${item.name}`,
+                            value: `**${item.description}**\n\n💰 **Price:** ${item.price} $CASH\n⏰ **Duration:** ${durationText}\n🎭 **Role:** ${roleMention}`,
+                            inline: false
+                        });
+
+                    itemEmbeds.push(itemEmbed);
                 });
-            });
 
-            // Create buttons for each item
-            const buttons = marketItems.map((item, index) =>
-                new ButtonBuilder()
-                    .setCustomId(`buy_market_${item._id}`)
-                    .setLabel(`Buy ${item.name}`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setEmoji('🛒')
-            );
+                // Create buttons for each item (more compact)
+                buttons = marketItems.map((item, index) =>
+                    new ButtonBuilder()
+                        .setCustomId(`buy_market_${item._id}`)
+                        .setLabel(`Buy ${item.name}`)
+                        .setStyle(ButtonStyle.Success)
+                        .setEmoji('🛒')
+                );
 
-            // Split buttons into rows of 3
-            const rows = [];
-            for (let i = 0; i < buttons.length; i += 3) {
-                const row = new ActionRowBuilder().addComponents(buttons.slice(i, i + 3));
-                rows.push(row);
+                // Split buttons into rows of 2 for better layout
+                for (let i = 0; i < buttons.length; i += 2) {
+                    const row = new ActionRowBuilder().addComponents(buttons.slice(i, i + 2));
+                    rows.push(row);
+                }
+            } else {
+                // Create empty marketplace
+                const emptyEmbed = new EmbedBuilder()
+                    .setColor('#2F3136')
+                    .setTitle('')
+                    .setDescription('')
+                    .addFields({
+                        name: '🏪 Marketplace',
+                        value: '**No items available at the moment.**\n\nAdd items using `/market add` to start selling!',
+                        inline: false
+                    });
+                
+                itemEmbeds = [emptyEmbed];
             }
 
-            embed.setFooter({ text: 'Click a button to purchase an item' });
 
-            // Send the market message
+
+            // Send the marketplace message with individual item embeds
+            const allEmbeds = [embed, ...itemEmbeds];
             const marketMessage = await interaction.channel.send({
-                embeds: [embed],
+                embeds: allEmbeds,
                 components: rows
             });
 
