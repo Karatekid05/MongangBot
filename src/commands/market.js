@@ -131,7 +131,7 @@ module.exports = {
             const embed = new EmbedBuilder()
                 .setColor('#2F3136')
                 .setTitle('**Marketplace**')
-                .setDescription('')
+                .setDescription('Loading marketplace items...')
                 .setThumbnail(null);
 
             // Add items in Engage Bot format
