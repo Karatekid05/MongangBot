@@ -16,6 +16,8 @@ async function addMarketItem(itemData) {
             price: itemData.price,
             roleId: itemData.roleId,
             durationHours: itemData.durationHours || 0,
+            spots: itemData.spots || 0,
+            soldSpots: 0,
             createdBy: itemData.createdBy,
             isActive: true
         });
@@ -107,6 +109,11 @@ async function buyMarketItem(itemId, userId, username, guild) {
             return { success: false, error: 'You already have this role.' };
         }
 
+        // Check if spots are available
+        if (item.spots > 0 && item.soldSpots >= item.spots) {
+            return { success: false, error: 'This item is sold out.' };
+        }
+
         // Remove cash from user
         await removeCash(userId, item.price, 'market_purchase');
 
@@ -133,6 +140,11 @@ async function buyMarketItem(itemId, userId, username, guild) {
         });
 
         await purchase.save();
+
+        // Update sold spots count
+        if (item.spots > 0) {
+            await MarketItem.findByIdAndUpdate(item._id, { $inc: { soldSpots: 1 } });
+        }
 
         // Schedule role removal if temporary
         if (item.durationHours > 0) {
@@ -328,7 +340,8 @@ async function updateMarketMessage(channelId, messageId, client) {
             let itemsList = '';
             marketItems.forEach((item, index) => {
                 const roleMention = `<@&${item.roleId}>`;
-                itemsList += `🛒 • ${roleMention} | ${item.price} $CASH • Unlimited spots\n`;
+                const spotsText = item.spots > 0 ? `${item.spots - item.soldSpots} spots left` : 'Unlimited spots';
+                itemsList += `🛒 • ${roleMention} | ${item.price} $CASH • ${spotsText}\n`;
             });
             
             embed.setDescription(itemsList);

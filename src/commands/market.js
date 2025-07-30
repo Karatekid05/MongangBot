@@ -17,10 +17,7 @@ module.exports = {
                     option.setName('name')
                         .setDescription('Item name')
                         .setRequired(true))
-                .addStringOption(option =>
-                    option.setName('description')
-                        .setDescription('Item description')
-                        .setRequired(true))
+
                 .addIntegerOption(option =>
                     option.setName('price')
                         .setDescription('Price in $CASH')
@@ -32,6 +29,10 @@ module.exports = {
                 .addIntegerOption(option =>
                     option.setName('duration_hours')
                         .setDescription('Duration in hours (0 for permanent)')
+                        .setRequired(false))
+                .addIntegerOption(option =>
+                    option.setName('spots')
+                        .setDescription('Number of available spots (0 for unlimited)')
                         .setRequired(false)))
         .addSubcommand(subcommand =>
             subcommand
@@ -139,7 +140,8 @@ module.exports = {
                 let itemsList = '';
                 marketItems.forEach((item, index) => {
                     const roleMention = `<@&${item.roleId}>`;
-                    itemsList += `🛒 • ${roleMention} | ${item.price} $CASH • Unlimited spots\n`;
+                    const spotsText = item.spots > 0 ? `${item.spots - item.soldSpots} spots left` : 'Unlimited spots';
+                    itemsList += `🛒 • ${roleMention} | ${item.price} $CASH • ${spotsText}\n`;
                 });
                 
                 embed.setDescription(itemsList);
@@ -178,10 +180,10 @@ module.exports = {
 
         try {
             const name = interaction.options.getString('name');
-            const description = interaction.options.getString('description');
             const price = interaction.options.getInteger('price');
             const roleId = interaction.options.getString('role_id');
             const durationHours = interaction.options.getInteger('duration_hours') || 0;
+            const spots = interaction.options.getInteger('spots') || 0;
 
             // Verify role exists
             const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
@@ -192,10 +194,11 @@ module.exports = {
             // Add item to market
             const item = await require('../utils/marketManager').addMarketItem({
                 name,
-                description,
+                description: name, // Use name as description
                 price,
                 roleId,
                 durationHours,
+                spots,
                 createdBy: interaction.user.id
             });
 
@@ -244,9 +247,10 @@ module.exports = {
 
             marketItems.forEach((item, index) => {
                 const durationText = item.durationHours > 0 ? `${item.durationHours}h` : 'Permanent';
+                const spotsText = item.spots > 0 ? `${item.soldSpots}/${item.spots} sold` : 'Unlimited';
                 embed.addFields({
                     name: `${index + 1}. ${item.name} (ID: ${item._id})`,
-                    value: `💰 Price: ${item.price} $CASH\n⏰ Duration: ${durationText}\n📝 ${item.description}`,
+                    value: `💰 Price: ${item.price} $CASH\n⏰ Duration: ${durationText}\n📊 Spots: ${spotsText}\n📝 ${item.description}`,
                     inline: false
                 });
             });

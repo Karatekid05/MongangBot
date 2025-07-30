@@ -25,6 +25,15 @@ const marketItemSchema = new mongoose.Schema({
         default: 0, // 0 = permanent
         min: 0
     },
+    spots: {
+        type: Number,
+        default: 0, // 0 = unlimited
+        min: 0
+    },
+    soldSpots: {
+        type: Number,
+        default: 0
+    },
     createdBy: {
         type: String,
         required: true
