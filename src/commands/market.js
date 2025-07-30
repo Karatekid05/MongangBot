@@ -8,11 +8,7 @@ module.exports = {
         .addSubcommand(subcommand =>
             subcommand
                 .setName('setup')
-                .setDescription('Setup the market message in the current channel (Moderators only)')
-                .addStringOption(option =>
-                    option.setName('log_channel')
-                        .setDescription('Channel ID for purchase logs')
-                        .setRequired(true)))
+                .setDescription('Setup the market message in the current channel (Moderators only)'))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('add')
@@ -112,89 +108,64 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
 
         try {
-            const logChannelId = interaction.options.getString('log_channel');
+            // Use fixed log channel ID
+            const logChannelId = '1353880966074073109';
+            const marketChannelId = '1400183182086766682';
             
             // Verify log channel exists
             const logChannel = await interaction.guild.channels.fetch(logChannelId).catch(() => null);
             if (!logChannel) {
-                return interaction.editReply('❌ Invalid log channel ID.');
+                return interaction.editReply('❌ Log channel not found. Please check the configuration.');
+            }
+
+            // Get market channel
+            const marketChannel = await interaction.guild.channels.fetch(marketChannelId).catch(() => null);
+            if (!marketChannel) {
+                return interaction.editReply('❌ Market channel not found. Please check the configuration.');
             }
 
             // Get market items
             const marketItems = await listMarketItems();
             
-            // Create marketplace-style embed
+            // Create marketplace embed like Engage Bot
             const embed = new EmbedBuilder()
                 .setColor('#2F3136')
-                .setTitle('🏪 Marketplace')
-                .setDescription('Welcome to the Mongang Marketplace!')
+                .setTitle('**Marketplace**')
+                .setDescription('')
                 .setThumbnail(null);
 
-            let itemEmbeds = [];
-            let buttons = [];
-            let rows = [];
-
+            // Add items in Engage Bot format
             if (marketItems.length > 0) {
-                // Add items as individual embeds for better visual separation
+                let itemsList = '';
                 marketItems.forEach((item, index) => {
-                    const durationText = item.durationHours > 0 ? `${item.durationHours}h` : 'Permanent';
                     const roleMention = `<@&${item.roleId}>`;
-                    
-                    const itemEmbed = new EmbedBuilder()
-                        .setColor('#2F3136')
-                        .setTitle('🏪 Item')
-                        .setDescription('')
-                        .addFields({
-                            name: `🏪 ${item.name}`,
-                            value: `**${item.description}**\n\n💰 **Price:** ${item.price} $CASH\n⏰ **Duration:** ${durationText}\n🎭 **Role:** ${roleMention}`,
-                            inline: false
-                        });
-
-                    itemEmbeds.push(itemEmbed);
+                    itemsList += `🛒 • ${roleMention} | ${item.price} $CASH • Unlimited spots\n`;
                 });
-
-                // Create buttons for each item (more compact)
-                buttons = marketItems.map((item, index) =>
-                    new ButtonBuilder()
-                        .setCustomId(`buy_market_${item._id}`)
-                        .setLabel(`Buy ${item.name}`)
-                        .setStyle(ButtonStyle.Success)
-                        .setEmoji('🛒')
-                );
-
-                // Split buttons into rows of 2 for better layout
-                for (let i = 0; i < buttons.length; i += 2) {
-                    const row = new ActionRowBuilder().addComponents(buttons.slice(i, i + 2));
-                    rows.push(row);
-                }
-            } else {
-                // Create empty marketplace
-                const emptyEmbed = new EmbedBuilder()
-                    .setColor('#2F3136')
-                    .setTitle('🏪 Marketplace')
-                    .setDescription('No items available')
-                    .addFields({
-                        name: '🏪 Marketplace',
-                        value: '**No items available at the moment.**\n\nAdd items using `/market add` to start selling!',
-                        inline: false
-                    });
                 
-                itemEmbeds = [emptyEmbed];
+                embed.setDescription(itemsList);
+            } else {
+                embed.setDescription('No items available at the moment.\n\nAdd items using `/market add` to start selling!');
             }
 
+            // Create "Buy Item" button
+            const buyButton = new ButtonBuilder()
+                .setCustomId('market_buy_item')
+                .setLabel('Buy Item')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('🛒');
 
+            const row = new ActionRowBuilder().addComponents(buyButton);
 
-            // Send the marketplace message with individual item embeds
-            const allEmbeds = [embed, ...itemEmbeds];
-            const marketMessage = await interaction.channel.send({
-                embeds: allEmbeds,
-                components: rows
+            // Send the marketplace message to the market channel
+            const marketMessage = await marketChannel.send({
+                embeds: [embed],
+                components: [row]
             });
 
             // Store the market message info
-            await require('../utils/marketManager').setMarketMessage(interaction.channel.id, marketMessage.id, logChannelId);
+            await require('../utils/marketManager').setMarketMessage(marketChannelId, marketMessage.id, logChannelId);
 
-            await interaction.editReply('✅ Market setup complete! The market message has been posted.');
+            await interaction.editReply('✅ Marketplace setup complete! The marketplace message has been posted in the market channel.');
 
         } catch (error) {
             console.error('Error setting up market:', error);

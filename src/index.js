@@ -320,6 +320,10 @@ client.on('interactionCreate', async interaction => {
             handleBuyTicketButton(interaction);
         } else if (customId.startsWith('buy_market_')) {
             handleBuyMarketButton(interaction);
+        } else if (customId === 'market_buy_item') {
+            handleMarketBuyItemButton(interaction);
+        } else if (customId === 'market_select_item') {
+            handleMarketSelectItem(interaction);
         }
     } else if (interaction.isAutocomplete()) {
         const command = client.commands.get(interaction.commandName);
@@ -631,6 +635,87 @@ async function handleBuyMarketButton(interaction) {
 
     } catch (error) {
         console.error('Error buying market item via button:', error);
+        await interaction.editReply({
+            content: `❌ Error processing purchase: ${error.message}`
+        });
+    }
+}
+
+/**
+ * Handle the Market Buy Item button click (shows selector)
+ * @param {ButtonInteraction} interaction 
+ */
+async function handleMarketBuyItemButton(interaction) {
+    try {
+        await interaction.deferReply({ ephemeral: true });
+
+        const { listMarketItems } = require('./utils/marketManager');
+        const marketItems = await listMarketItems();
+
+        if (marketItems.length === 0) {
+            return interaction.editReply('❌ No items available in the marketplace.');
+        }
+
+        // Create select menu options
+        const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('market_select_item')
+            .setPlaceholder('Choose an item to purchase')
+            .addOptions(
+                marketItems.map(item => {
+                    const roleMention = `<@&${item.roleId}>`;
+                    const durationText = item.durationHours > 0 ? `${item.durationHours}h` : 'Permanent';
+                    return new StringSelectMenuOptionBuilder()
+                        .setLabel(`${item.name} - ${item.price} $CASH`)
+                        .setDescription(`${roleMention} • ${durationText}`)
+                        .setValue(item._id.toString());
+                })
+            );
+
+        const row = new ActionRowBuilder().addComponents(select);
+
+        await interaction.editReply({
+            content: '🛒 **Select an item to purchase:**',
+            components: [row]
+        });
+
+    } catch (error) {
+        console.error('Error showing market selector:', error);
+        await interaction.editReply({
+            content: `❌ Error loading marketplace items: ${error.message}`
+        });
+    }
+}
+
+/**
+ * Handle the Market Select Item interaction
+ * @param {StringSelectMenuInteraction} interaction 
+ */
+async function handleMarketSelectItem(interaction) {
+    try {
+        await interaction.deferReply({ ephemeral: true });
+
+        const selectedItemId = interaction.values[0];
+        const userId = interaction.user.id;
+        const username = interaction.user.username;
+
+        const { buyMarketItem } = require('./utils/marketManager');
+
+        // Buy the selected item
+        const result = await buyMarketItem(selectedItemId, userId, username, interaction.guild);
+
+        if (result.success) {
+            await interaction.editReply({
+                content: `✅ **Purchase successful!**\n\n**Item:** ${result.itemName}\n**Price:** ${result.price} $CASH\n**Duration:** ${result.duration}\n\nYou have been assigned the role!`
+            });
+        } else {
+            await interaction.editReply({
+                content: `❌ **Purchase failed:** ${result.error}`
+            });
+        }
+
+    } catch (error) {
+        console.error('Error processing market selection:', error);
         await interaction.editReply({
             content: `❌ Error processing purchase: ${error.message}`
         });

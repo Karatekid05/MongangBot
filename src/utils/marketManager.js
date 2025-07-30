@@ -316,70 +316,39 @@ async function updateMarketMessage(channelId, messageId, client) {
 
         const marketItems = await listMarketItems();
         
-        // Create marketplace-style embeds
+        // Create marketplace embed like Engage Bot
         const embed = new EmbedBuilder()
             .setColor('#2F3136')
-            .setTitle('🏪 Marketplace')
-            .setDescription('Welcome to the Mongang Marketplace!')
+            .setTitle('**Marketplace**')
+            .setDescription('')
             .setThumbnail(null);
 
-        let itemEmbeds = [];
-        let buttons = [];
-        let rows = [];
-
+        // Add items in Engage Bot format
         if (marketItems.length > 0) {
-            // Add items as individual embeds for better visual separation
+            let itemsList = '';
             marketItems.forEach((item, index) => {
-                const durationText = item.durationHours > 0 ? `${item.durationHours}h` : 'Permanent';
                 const roleMention = `<@&${item.roleId}>`;
-                
-                const itemEmbed = new EmbedBuilder()
-                    .setColor('#2F3136')
-                    .setTitle('🏪 Item')
-                    .setDescription('')
-                    .addFields({
-                        name: `🏪 ${item.name}`,
-                        value: `**${item.description}**\n\n💰 **Price:** ${item.price} $CASH\n⏰ **Duration:** ${durationText}\n🎭 **Role:** ${roleMention}`,
-                        inline: false
-                    });
-
-                itemEmbeds.push(itemEmbed);
+                itemsList += `🛒 • ${roleMention} | ${item.price} $CASH • Unlimited spots\n`;
             });
-
-            // Create buttons for each item (more compact)
-            const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-            buttons = marketItems.map((item, index) =>
-                new ButtonBuilder()
-                    .setCustomId(`buy_market_${item._id}`)
-                    .setLabel(`Buy ${item.name}`)
-                    .setStyle(ButtonStyle.Success)
-                    .setEmoji('🛒')
-            );
-
-            // Split buttons into rows of 2 for better layout
-            for (let i = 0; i < buttons.length; i += 2) {
-                const row = new ActionRowBuilder().addComponents(buttons.slice(i, i + 2));
-                rows.push(row);
-            }
-        } else {
-            // Create empty marketplace
-            const emptyEmbed = new EmbedBuilder()
-                .setColor('#2F3136')
-                .setTitle('🏪 Marketplace')
-                .setDescription('No items available')
-                .addFields({
-                    name: '🏪 Marketplace',
-                    value: '**No items available at the moment.**\n\nAdd items using `/market add` to start selling!',
-                    inline: false
-                });
             
-            itemEmbeds = [emptyEmbed];
+            embed.setDescription(itemsList);
+        } else {
+            embed.setDescription('No items available at the moment.\n\nAdd items using `/market add` to start selling!');
         }
 
-        const allEmbeds = [embed, ...itemEmbeds];
+        // Create "Buy Item" button
+        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+        const buyButton = new ButtonBuilder()
+            .setCustomId('market_buy_item')
+            .setLabel('Buy Item')
+            .setStyle(ButtonStyle.Success)
+            .setEmoji('🛒');
+
+        const row = new ActionRowBuilder().addComponents(buyButton);
+
         await message.edit({
-            embeds: allEmbeds,
-            components: rows
+            embeds: [embed],
+            components: [row]
         });
 
     } catch (error) {
