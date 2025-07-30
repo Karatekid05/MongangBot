@@ -322,7 +322,12 @@ client.on('interactionCreate', async interaction => {
             handleBuyMarketButton(interaction);
         } else if (customId === 'market_buy_item') {
             handleMarketBuyItemButton(interaction);
-        } else if (customId === 'market_select_item') {
+        }
+    } else if (interaction.isStringSelectMenu()) {
+        // Handle select menu interactions
+        const { customId } = interaction;
+
+        if (customId === 'market_select_item') {
             handleMarketSelectItem(interaction);
         }
     } else if (interaction.isAutocomplete()) {
@@ -693,11 +698,16 @@ async function handleMarketBuyItemButton(interaction) {
  */
 async function handleMarketSelectItem(interaction) {
     try {
+        console.log('Market select item interaction received:', interaction.customId);
         await interaction.deferReply({ ephemeral: true });
 
         const selectedItemId = interaction.values[0];
         const userId = interaction.user.id;
         const username = interaction.user.username;
+
+        console.log('Selected item ID:', selectedItemId);
+        console.log('User ID:', userId);
+        console.log('Username:', username);
 
         const { buyMarketItem } = require('./utils/marketManager');
 
