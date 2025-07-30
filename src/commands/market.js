@@ -126,22 +126,8 @@ module.exports = {
             // Create marketplace-style embed
             const embed = new EmbedBuilder()
                 .setColor('#2F3136')
-                .setTitle('')
-                .setDescription('')
-                .setThumbnail(null);
-
-            // Create the marketplace header
-            const headerEmbed = new EmbedBuilder()
-                .setColor('#2F3136')
-                .setTitle('')
-                .setDescription('')
-                .setThumbnail(null);
-
-            // Create the marketplace content
-            const contentEmbed = new EmbedBuilder()
-                .setColor('#2F3136')
-                .setTitle('')
-                .setDescription('')
+                .setTitle('🏪 Marketplace')
+                .setDescription('Welcome to the Mongang Marketplace!')
                 .setThumbnail(null);
 
             let itemEmbeds = [];
@@ -156,7 +142,7 @@ module.exports = {
                     
                     const itemEmbed = new EmbedBuilder()
                         .setColor('#2F3136')
-                        .setTitle('')
+                        .setTitle('🏪 Item')
                         .setDescription('')
                         .addFields({
                             name: `🏪 ${item.name}`,
@@ -185,8 +171,8 @@ module.exports = {
                 // Create empty marketplace
                 const emptyEmbed = new EmbedBuilder()
                     .setColor('#2F3136')
-                    .setTitle('')
-                    .setDescription('')
+                    .setTitle('🏪 Marketplace')
+                    .setDescription('No items available')
                     .addFields({
                         name: '🏪 Marketplace',
                         value: '**No items available at the moment.**\n\nAdd items using `/market add` to start selling!',

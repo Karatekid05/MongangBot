@@ -319,8 +319,8 @@ async function updateMarketMessage(channelId, messageId, client) {
         // Create marketplace-style embeds
         const embed = new EmbedBuilder()
             .setColor('#2F3136')
-            .setTitle('')
-            .setDescription('')
+            .setTitle('🏪 Marketplace')
+            .setDescription('Welcome to the Mongang Marketplace!')
             .setThumbnail(null);
 
         let itemEmbeds = [];
@@ -335,7 +335,7 @@ async function updateMarketMessage(channelId, messageId, client) {
                 
                 const itemEmbed = new EmbedBuilder()
                     .setColor('#2F3136')
-                    .setTitle('')
+                    .setTitle('🏪 Item')
                     .setDescription('')
                     .addFields({
                         name: `🏪 ${item.name}`,
@@ -365,8 +365,8 @@ async function updateMarketMessage(channelId, messageId, client) {
             // Create empty marketplace
             const emptyEmbed = new EmbedBuilder()
                 .setColor('#2F3136')
-                .setTitle('')
-                .setDescription('')
+                .setTitle('🏪 Marketplace')
+                .setDescription('No items available')
                 .addFields({
                     name: '🏪 Marketplace',
                     value: '**No items available at the moment.**\n\nAdd items using `/market add` to start selling!',
