@@ -17,7 +17,6 @@ module.exports = {
                     option.setName('name')
                         .setDescription('Item name')
                         .setRequired(true))
-
                 .addIntegerOption(option =>
                     option.setName('price')
                         .setDescription('Price in $CASH')
@@ -33,6 +32,10 @@ module.exports = {
                 .addIntegerOption(option =>
                     option.setName('spots')
                         .setDescription('Number of available spots (0 for unlimited)')
+                        .setRequired(false))
+                .addBooleanOption(option =>
+                    option.setName('external_wl')
+                        .setDescription('Is this WL from another project? Requires Capo to buy')
                         .setRequired(false)))
         .addSubcommand(subcommand =>
             subcommand
@@ -184,6 +187,7 @@ module.exports = {
             const roleId = interaction.options.getString('role_id');
             const durationHours = interaction.options.getInteger('duration_hours') || 0;
             const spots = interaction.options.getInteger('spots') || 0;
+            const externalWl = interaction.options.getBoolean('external_wl') || false;
 
             // Verify role exists
             const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
@@ -199,6 +203,7 @@ module.exports = {
                 roleId,
                 durationHours,
                 spots,
+                externalWl,
                 createdBy: interaction.user.id
             });
 

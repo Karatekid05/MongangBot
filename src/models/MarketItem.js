@@ -34,6 +34,10 @@ const marketItemSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    externalWl: {
+        type: Boolean,
+        default: false
+    },
     createdBy: {
         type: String,
         required: true

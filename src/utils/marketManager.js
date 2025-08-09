@@ -2,6 +2,7 @@ const { EmbedBuilder } = require('discord.js');
 const MarketItem = require('../models/MarketItem');
 const MarketPurchase = require('../models/MarketPurchase');
 const { removeCash } = require('./pointsManager');
+const { FASTSHOTER_ROLE_ID, CAPO_ROLE_ID } = require('./constants');
 
 /**
  * Add a new item to the market
@@ -18,6 +19,7 @@ async function addMarketItem(itemData) {
             durationHours: itemData.durationHours || 0,
             spots: itemData.spots || 0,
             soldSpots: 0,
+            externalWl: !!itemData.externalWl,
             createdBy: itemData.createdBy,
             isActive: true
         });
@@ -88,6 +90,20 @@ async function buyMarketItem(itemId, userId, username, guild) {
             return { success: false, error: 'Item not found or not available.' };
         }
 
+        // Fetch member for role checks
+        const member = await guild.members.fetch(userId);
+
+        // Enforce purchase rules
+        // 1) Users who don't have FastShoter can't buy Capo
+        if (item.roleId === CAPO_ROLE_ID && !member.roles.cache.has(FASTSHOTER_ROLE_ID)) {
+            return { success: false, error: 'You must have the FastShoter role to buy Capo.' };
+        }
+
+        // 2) Users who don't have Capo can't buy WL from other projects
+        if (item.externalWl && !member.roles.cache.has(CAPO_ROLE_ID)) {
+            return { success: false, error: 'You must have the Capo role to buy external project WL.' };
+        }
+
         // Check if user has enough cash
         const User = require('../models/User');
         const user = await User.findOne({ userId });
@@ -104,7 +120,6 @@ async function buyMarketItem(itemId, userId, username, guild) {
         }
 
         // Check if user already has this role (for permanent roles)
-        const member = await guild.members.fetch(userId);
         if (member.roles.cache.has(item.roleId)) {
             return { success: false, error: 'You already have this role.' };
         }

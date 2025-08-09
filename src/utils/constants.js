@@ -47,6 +47,10 @@ const ADDITIONAL_CHAT_CHANNELS = [
 // Award sources
 const AWARD_SOURCES = ['games', 'memesAndArt', 'chatActivity', 'others'];
 
+// Purchase requirement roles
+const FASTSHOTER_ROLE_ID = '1353402683247165561';
+const CAPO_ROLE_ID = '1353402893532659732';
+
 /**
  * Determine user's gang with priority system (Mad Gang takes priority)
  * @param {GuildMember} member - Discord guild member
@@ -92,6 +96,8 @@ module.exports = {
     MAD_GANG_ROLE_ID,
     AWARD_SOURCES,
     ADDITIONAL_CHAT_CHANNELS,
+    FASTSHOTER_ROLE_ID,
+    CAPO_ROLE_ID,
     getUserGangWithPriority,
     getUserGangRoles
 }; 
