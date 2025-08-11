@@ -335,20 +335,27 @@ async function removeCash(userId, amount, source = 'others') {
             };
         }
 
-        // Remove points ONLY from total cash (not weekly cash)
+        // Remove points from total cash and weekly cash
         const prevCash = user.cash;
+        const prevWeeklyCash = user.weeklyCash || 0;
         user.cash = Math.max(0, user.cash - amount);
-
-        // Calculate actual amount removed (in case user had less than amount)
+        // Calculate actual amount removed from total (in case user had less than amount)
         const actualAmountRemoved = prevCash - user.cash;
+        // Apply same removal to weekly cash, clamped
+        user.weeklyCash = Math.max(0, prevWeeklyCash - actualAmountRemoved);
 
         // Also remove from point sources (proporcional ou específico)
         if (!isProportional && user.pointsBySource[source] !== undefined) {
-            // Remove from specific source
+            // Remove from specific source (total)
             user.pointsBySource[source] = Math.max(0, user.pointsBySource[source] - actualAmountRemoved);
-            // NOT removing from weeklyPointsBySource to preserve weekly cash
+            // Remove from weekly source as well
+            if (user.weeklyPointsBySource && user.weeklyPointsBySource[source] !== undefined) {
+                const weeklyBefore = user.weeklyPointsBySource[source] || 0;
+                const weeklyRemoval = Math.min(weeklyBefore, actualAmountRemoved);
+                user.weeklyPointsBySource[source] = weeklyBefore - weeklyRemoval;
+            }
         } else {
-            // Distribute removal proportionally across sources
+            // Distribute removal proportionally across total sources
             const sources = Object.keys(user.pointsBySource);
 
             // Calculate total points from all sources for proportional distribution
@@ -367,54 +374,54 @@ async function removeCash(userId, amount, source = 'others') {
 
             for (const src of sources) {
                 if (user.pointsBySource[src] > 0) {
-                    // Calculate proportion of points to remove from this source
                     const proportion = user.pointsBySource[src] / totalPoints;
-                    // Use valores exatos (sem arredondamento ainda)
                     const exactAmount = actualAmountRemoved * proportion;
-
-                    // Armazenar para processamento posterior
                     amountsToRemove[src] = exactAmount;
                     totalToRemove += exactAmount;
                 }
             }
 
-            // Segunda passagem: ajuste e remoção real
+            // Segunda passagem: ajuste e remoção real (total) e espelhar no weekly
             let remainingToRemove = actualAmountRemoved;
+            let removedPerSource = {};
 
             for (const src of sources) {
                 if (user.pointsBySource[src] > 0 && amountsToRemove[src] > 0) {
-                    // Calcular o valor ajustado (com possível arredondamento)
-                    // para garantir que o total removido seja exatamente igual ao montante
                     const adjustedAmount = src === sources[sources.length - 1]
-                        ? remainingToRemove  // último source pega o resto
+                        ? remainingToRemove
                         : Math.min(
                             user.pointsBySource[src],
                             Math.floor(amountsToRemove[src])
                         );
 
-                    // Não permitir valores negativos
                     const finalAmount = Math.max(0, Math.min(adjustedAmount, user.pointsBySource[src]));
 
-                    // Remover do source
+                    // Remove from total source
                     user.pointsBySource[src] -= finalAmount;
                     remainingToRemove -= finalAmount;
-
-                    // NOT removing from weeklyPointsBySource to preserve weekly cash
+                    removedPerSource[src] = (removedPerSource[src] || 0) + finalAmount;
                 }
             }
 
-            // Tratamento para eventuais pontos que restaram devido a arredondamentos
+            // Tratamento para eventuais pontos que restaram devido a arredondamentos (total)
             if (remainingToRemove > 0) {
                 for (const src of sources) {
                     if (user.pointsBySource[src] > 0) {
                         const finalAmount = Math.min(user.pointsBySource[src], remainingToRemove);
                         user.pointsBySource[src] -= finalAmount;
                         remainingToRemove -= finalAmount;
-
-                        // NOT removing from weeklyPointsBySource to preserve weekly cash
-
+                        removedPerSource[src] = (removedPerSource[src] || 0) + finalAmount;
                         if (remainingToRemove <= 0) break;
                     }
+                }
+            }
+
+            // Espelhar as remoções no weeklyPointsBySource, respeitando limites
+            if (user.weeklyPointsBySource) {
+                for (const src of Object.keys(removedPerSource)) {
+                    const weeklyBefore = user.weeklyPointsBySource[src] || 0;
+                    const toRemoveWeekly = Math.min(weeklyBefore, removedPerSource[src]);
+                    user.weeklyPointsBySource[src] = weeklyBefore - toRemoveWeekly;
                 }
             }
         }
