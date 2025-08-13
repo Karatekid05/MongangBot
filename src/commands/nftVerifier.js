@@ -4,6 +4,7 @@ const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD, COLLECTION3_
 const User = require('../models/User');
 const { checkUserNfts, getNftsForCollection } = require('../utils/monadNftChecker');
 const Setting = require('../models/Setting');
+const { COLLECTION3_CONTRACT_ADDRESS } = require('../utils/constants');
 
 // cooldown map for status checks (per user)
 const statusCooldown = new Map();
@@ -114,14 +115,13 @@ module.exports = {
 			const status = await getUserNftStatus(interaction.user.id);
 			const verifiedText = user?.walletVerified ? 'Verified' : 'Not verified';
 
-			// Collection 3 line based on NFT holdings
-			const c3Setting = await Setting.findOne({ key: 'COLLECTION3_ADDRESS' });
+			// Collection 3 line based on NFT holdings (static contract)
 			let c3Line = `<@&1402656276441469050> not live yet`;
-			if (c3Setting && c3Setting.value) {
+			if (COLLECTION3_CONTRACT_ADDRESS) {
 				let hasPass = false;
 				if (user && user.walletAddress) {
 					try {
-						const c3Count = await getNftsForCollection(user.walletAddress, c3Setting.value, 0);
+						const c3Count = await getNftsForCollection(user.walletAddress, COLLECTION3_CONTRACT_ADDRESS, 0);
 						hasPass = c3Count > 0;
 					} catch {}
 				}

@@ -1,7 +1,7 @@
 const axios = require('axios');
 const User = require('../models/User');
 const Setting = require('../models/Setting');
-const { COLLECTION3_ROLE_ID, COLLECTION3_NAME } = require('./constants');
+const { COLLECTION3_ROLE_ID, COLLECTION3_NAME, COLLECTION3_CONTRACT_ADDRESS } = require('./constants');
 
 // Monad Testnet RPC Endpoint
 const MONAD_RPC_URL = process.env.MONAD_RPC_URL || 'https://testnet-rpc.monad.xyz/';
@@ -95,14 +95,16 @@ async function checkAllUsersNfts(userId = null) {
 }
 
 /**
- * Check NFTs for a specific user
- * @param {Object} user - MongoDB user to check
+ * Check NFTs for a specific user and toggle collection 3 role if configured
+ * @param {Object} user
+ * @param {Guild} [guild]
+ * @param {Object} [options] - { bypassCache?: boolean }
  */
-async function checkUserNfts(user, guild) {
+async function checkUserNfts(user, guild, options = {}) {
     try {
         // Check NFTs for each collection
-        const collection1Count = await getNftsForCollection(user.walletAddress, process.env.NFT_COLLECTION1_ADDRESS, 0);
-        const collection2Count = await getNftsForCollection(user.walletAddress, process.env.NFT_COLLECTION2_ADDRESS, 0);
+        const collection1Count = await getNftsForCollection(user.walletAddress, process.env.NFT_COLLECTION1_ADDRESS, 0, options);
+        const collection2Count = await getNftsForCollection(user.walletAddress, process.env.NFT_COLLECTION2_ADDRESS, 0, options);
 
         console.log(`NFTs found for ${user.username}: Collection 1: ${collection1Count}, Collection 2: ${collection2Count}`);
 
@@ -117,11 +119,10 @@ async function checkUserNfts(user, guild) {
             console.log(`NFTs updated for ${user.username}`);
         }
 
-        // Collection 3: role assignment if configured
-        const setting = await Setting.findOne({ key: 'COLLECTION3_ADDRESS' });
-        if (setting && setting.value) {
-            const collection3Address = setting.value;
-            const collection3Count = await getNftsForCollection(user.walletAddress, collection3Address, 0);
+        // Collection 3: role assignment based on static contract
+        const collection3Address = COLLECTION3_CONTRACT_ADDRESS;
+        if (collection3Address) {
+            const collection3Count = await getNftsForCollection(user.walletAddress, collection3Address, 0, options);
             const hasPass = collection3Count > 0;
 
             if (guild) {
@@ -149,13 +150,13 @@ async function checkUserNfts(user, guild) {
 }
 
 /**
- * Get ERC-1155 NFT count for a given wallet and collection
- * @param {string} address - Wallet address
- * @param {string} contractAddress - NFT contract address
- * @param {number} tokenId - Token ID to check
- * @returns {Promise<number>} - NFT count
+ * Get ERC-1155 or ERC-721 NFT count for a given wallet and collection
+ * @param {string} address
+ * @param {string} contractAddress
+ * @param {number} tokenId
+ * @param {Object} [options] - { bypassCache?: boolean }
  */
-async function getNftsForCollection(address, contractAddress, tokenId = 0) {
+async function getNftsForCollection(address, contractAddress, tokenId = 0, options = {}) {
     try {
         // Ensure address is in the correct format
         address = address.toLowerCase();
@@ -163,13 +164,13 @@ async function getNftsForCollection(address, contractAddress, tokenId = 0) {
             address = '0x' + address;
         }
 
-        // Use cache to avoid repeated calls
         const cacheKey = `${address}-${contractAddress}-${tokenId}`;
-        const cachedResult = nftCache.get(cacheKey);
-
-        if (cachedResult !== null) {
-            console.log(`Using cached result for ${address} in collection ${contractAddress}`);
-            return cachedResult;
+        if (!options.bypassCache) {
+            const cachedResult = nftCache.get(cacheKey);
+            if (cachedResult !== null) {
+                console.log(`Using cached result for ${address} in collection ${contractAddress}`);
+                return cachedResult;
+            }
         }
 
         // Adjust address format for the call (remove 0x and pad to 64 characters)
@@ -181,7 +182,6 @@ async function getNftsForCollection(address, contractAddress, tokenId = 0) {
         const tokenIdHex = tokenId.toString(16).padStart(64, '0');
 
         // Create data for ERC-1155 balanceOf(address,uint256) call
-        // Format: function hash + wallet address + tokenId
         const balanceOfData = `${ERC1155_BALANCE_OF_ABI_HASH}${formattedAddress}${tokenIdHex}`;
 
         console.log(`Checking ERC-1155 NFT for ${address} in contract ${contractAddress}, tokenId ${tokenId}`);
@@ -201,9 +201,7 @@ async function getNftsForCollection(address, contractAddress, tokenId = 0) {
                 ]
             });
 
-            // Check if the response contains the result
             if (response.data && response.data.result) {
-                // Convert result (hex) to a number
                 const count = parseInt(response.data.result, 16);
                 console.log(`User has ${count} NFTs in collection ${contractAddress}, tokenId ${tokenId}`);
                 return count;
@@ -214,7 +212,7 @@ async function getNftsForCollection(address, contractAddress, tokenId = 0) {
                 console.warn(`Unexpected response: ${JSON.stringify(response.data)}`);
                 throw new Error('Unexpected response');
             }
-        }, 3);  // Maximum of 3 attempts
+        }, 3);
 
         // Store result in cache
         nftCache.set(cacheKey, nftCount);
@@ -226,20 +224,15 @@ async function getNftsForCollection(address, contractAddress, tokenId = 0) {
         // Fallback for ERC-721
         try {
             const nftCount = await getERC721NftsForCollection(address, contractAddress);
-            // Store result in cache even if it's a fallback
             nftCache.set(`${address}-${contractAddress}-${tokenId}`, nftCount);
             return nftCount;
         } catch (fallbackError) {
             console.error('Fallback also failed:', fallbackError.message);
-
-            // In production environment, return 0
-            // In development or test environment, we can simulate NFTs
             if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
                 console.log('Simulating query to Monad explorer for', address);
                 console.warn('WARNING: Assuming user has NFTs for test purposes');
                 return 0;
             }
-
             return 0;
         }
     }

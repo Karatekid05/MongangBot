@@ -33,11 +33,19 @@ async function startWalletVerification(interaction, client, walletAddressRaw) {
 		return { ok: false, reason: 'address_in_use' };
 	}
 
-	// Ensure user exists
+	// Ensure user exists (auto-create if needed)
 	let user = await User.findOne({ userId: interaction.user.id });
 	if (!user) {
-		await interaction.editReply({ content: 'You need to be registered in the system first. Send a message in a gang channel to initialize your profile.', ephemeral: true });
-		return { ok: false, reason: 'no_user' };
+		user = new User({
+			userId: interaction.user.id,
+			username: interaction.user.username,
+			cash: 0,
+			weeklyCash: 0,
+			pointsBySource: { games: 0, memesAndArt: 0, chatActivity: 0, others: 0, nftRewards: 0 },
+			weeklyPointsBySource: { games: 0, memesAndArt: 0, chatActivity: 0, others: 0, nftRewards: 0 },
+			nfts: { collection1Count: 0, collection2Count: 0 }
+		});
+		try { await user.save(); } catch {}
 	}
 
 	const verificationAmount = generateVerificationAmount();
@@ -80,7 +88,7 @@ async function verifyTransactionAndFinalize(userId, client) {
 				user.walletVerified = true;
 				user.verificationTxHash = txHash;
 				await user.save();
-				await checkUserNfts(user);
+				await checkUserNfts(user, null, { bypassCache: true });
 			}
 		} else {
 			// No DM; user can check status manually

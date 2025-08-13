@@ -9,6 +9,7 @@ const NFT_COLLECTION2_DAILY_REWARD = 50;  // 50 $CASH/day for Collection 2
 // Collection 3 (HaHa x MonGang Pass) role assignment (no cash)
 const COLLECTION3_NAME = 'HaHa x MonGang Pass';
 const COLLECTION3_ROLE_ID = '1402656276441469050';
+const COLLECTION3_CONTRACT_ADDRESS = '0xfe5b5af24280af7ea190a41d0240fe30c46f1c40';
 
 // Gang data
 const GANGS = [
@@ -104,6 +105,7 @@ module.exports = {
     CAPO_ROLE_ID,
     COLLECTION3_NAME,
     COLLECTION3_ROLE_ID,
+    COLLECTION3_CONTRACT_ADDRESS,
     getUserGangWithPriority,
     getUserGangRoles
 }; 
