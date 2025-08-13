@@ -30,11 +30,10 @@ module.exports = {
 					`  Collection 2 — ${NFT_COLLECTION2_DAILY_REWARD} $CASH/day.\n\n` +
 					`Status Check:\n` +
 					`Use the 'Check Status' button to view your:\n` +
-					`• Current token balances\n` +
-					`• Assigned role tier\n` +
+					`• Current NFT holdings\n` +
 					`• Verification status\n\n` +
-					`Note: Token balances are automatically synced daily, but you can force a sync by checking your status.\n\n` +
-					`Verification requires sending a tiny unique amount of MON to: ${VERIFICATION_WALLET}`
+					`Note: NFT holdings are automatically synced daily, but you can force a sync by checking your status.\n\n` +
+					`Verification will require sending a tiny unique amount of MON to: ${VERIFICATION_WALLET}`
 				)
 				.setTimestamp();
 
