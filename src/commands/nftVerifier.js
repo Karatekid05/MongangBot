@@ -1,10 +1,9 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { startWalletVerification, getUserNftStatus, VERIFICATION_WALLET } = require('../utils/walletVerification');
-const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD, COLLECTION3_NAME } = require('../utils/constants');
+const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD, COLLECTION3_NAME, COLLECTION3_CONTRACT_ADDRESS } = require('../utils/constants');
 const User = require('../models/User');
-const { checkUserNfts, getNftsForCollection } = require('../utils/monadNftChecker');
+const { checkUserNfts, getNftsForCollection, hasCollection3Pass } = require('../utils/monadNftChecker');
 const Setting = require('../models/Setting');
-const { COLLECTION3_CONTRACT_ADDRESS } = require('../utils/constants');
 
 // cooldown map for status checks (per user)
 const statusCooldown = new Map();
@@ -36,10 +35,10 @@ module.exports = {
 				.setTitle('Welcome to the Mongang NFT Verifier')
 				.setDescription(
 					`Verify your wallet to receive NFT rewards.\n\n` +
-					`Rewards:\n` +
-					`• Collection 1 — ${NFT_COLLECTION1_DAILY_REWARD} $CASH/day\n` +
-					`• Collection 2 — ${NFT_COLLECTION2_DAILY_REWARD} $CASH/day.\n` +
-					`• ${COLLECTION3_NAME} — <@&1402656276441469050>\n\n` +
+					`• Rewards:\n` +
+					`  Collection 1 — ${NFT_COLLECTION1_DAILY_REWARD} $CASH/day\n` +
+					`  Collection 2 — ${NFT_COLLECTION2_DAILY_REWARD} $CASH/day.\n` +
+					`  ${COLLECTION3_NAME} — <@&1402656276441469050>\n\n` +
 					`Status Check:\n` +
 					`Use the 'Check Status' button to view your:\n` +
 					`• Current NFT holdings\n` +
@@ -59,7 +58,6 @@ module.exports = {
 		}
 	},
 
-	// Button handlers are wired in index.js via interaction handlers
 	async handleVerifyButton(interaction, client) {
 		try {
 			const modal = new ModalBuilder()
@@ -76,7 +74,6 @@ module.exports = {
 			modal.addComponents(row);
 			await interaction.showModal(modal);
 		} catch (e) {
-			console.error('handleVerifyButton error:', e);
 			await interaction.reply({ content: 'Error opening modal. Please try again.', ephemeral: true });
 		}
 	},
@@ -87,7 +84,6 @@ module.exports = {
 			const address = interaction.fields.getTextInputValue('wallet_address');
 			await startWalletVerification(interaction, client, address);
 		} catch (e) {
-			console.error('handleWalletModal error:', e);
 			await interaction.editReply({ content: 'Error starting verification.', ephemeral: true });
 		}
 	},
@@ -106,25 +102,18 @@ module.exports = {
 			statusCooldown.set(interaction.user.id, now);
 			await interaction.deferReply({ ephemeral: true });
 
-			// Force a sync of NFTs before reporting status
 			const user = await User.findOne({ userId: interaction.user.id });
 			if (user && user.walletAddress) {
-				try { await checkUserNfts(user, interaction.guild); } catch {}
+				try { await checkUserNfts(user, interaction.guild, { bypassCache: true }); } catch {}
 			}
 
 			const status = await getUserNftStatus(interaction.user.id);
 			const verifiedText = user?.walletVerified ? 'Verified' : 'Not verified';
 
-			// Collection 3 line based on NFT holdings (static contract)
 			let c3Line = `<@&1402656276441469050> not live yet`;
-			if (COLLECTION3_CONTRACT_ADDRESS) {
+			if (COLLECTION3_CONTRACT_ADDRESS && user?.walletAddress) {
 				let hasPass = false;
-				if (user && user.walletAddress) {
-					try {
-						const c3Count = await getNftsForCollection(user.walletAddress, COLLECTION3_CONTRACT_ADDRESS, 0);
-						hasPass = c3Count > 0;
-					} catch {}
-				}
+				try { hasPass = await hasCollection3Pass(user.walletAddress, { bypassCache: true }); } catch {}
 				c3Line = hasPass ? `<@&1402656276441469050> assigned` : `<@&1402656276441469050> not assigned/removed.`;
 			}
 
@@ -141,7 +130,6 @@ module.exports = {
 
 			await interaction.editReply(lines.join('\n'));
 		} catch (e) {
-			console.error('handleCheckStatus error:', e);
 			await interaction.editReply({ content: 'Error checking status.', ephemeral: true });
 		}
 	}
