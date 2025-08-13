@@ -347,6 +347,48 @@ async function supportsInterface(contractAddress, interfaceId) {
   return false;
 }
 
+async function hasCollection3Pass(address, options = {}) {
+  if (!COLLECTION3_CONTRACT_ADDRESS) return false;
+  let addr = address.toLowerCase();
+  if (!addr.startsWith('0x')) addr = '0x' + addr;
+
+  const cacheKey = `c3pass-${addr}-${COLLECTION3_CONTRACT_ADDRESS}`;
+  if (!options.bypassCache) {
+    const cached = nftCache.get(cacheKey);
+    if (cached !== null) return cached;
+  }
+
+  // Try ERC721 balanceOf first (some contracts expose aggregated balances)
+  try {
+    const formattedAddr = addr.slice(2).toLowerCase().padStart(64, '0');
+    const data = `${ERC721_BALANCE_OF_ABI_HASH}000000000000000000000000${formattedAddr}`;
+    const resp = await axios.post(MONAD_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] });
+    if (resp.data && resp.data.result) {
+      const count = parseInt(resp.data.result, 16) || 0;
+      if (count > 0) { nftCache.set(cacheKey, true); return true; }
+    }
+  } catch {}
+
+  // Assume ERC1155 multi-id and probe ids 0..777
+  const formattedAddr64 = addr.slice(2).toLowerCase().padStart(64, '0');
+  for (let probeId = 0; probeId <= 777; probeId++) {
+    const tokenIdHex = probeId.toString(16).padStart(64, '0');
+    const data = `${ERC1155_BALANCE_OF_ABI_HASH}${formattedAddr64}${tokenIdHex}`;
+    try {
+      const resp = await axios.post(MONAD_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] });
+      if (resp.data && resp.data.result) {
+        const count = parseInt(resp.data.result, 16) || 0;
+        if (count > 0) { nftCache.set(cacheKey, true); return true; }
+      }
+    } catch {
+      // continue
+    }
+  }
+
+  nftCache.set(cacheKey, false);
+  return false;
+}
+
 /**
  * Check if a specific transaction was performed
  * @param {string} fromAddress - Source wallet address
@@ -439,5 +481,6 @@ module.exports = {
     checkUserNfts,
     getNftsForCollection,
     getERC721NftsForCollection,
+    hasCollection3Pass,
     checkTransactionVerification
 }; 
