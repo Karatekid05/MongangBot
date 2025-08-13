@@ -3,8 +3,8 @@ const POINTS_PER_MESSAGE = 10;
 const MESSAGE_COOLDOWN_MS = 30 * 1000; // 30 seconds
 
 // NFT rewards - valores fixos independentemente da quantidade de NFTs
-const NFT_COLLECTION1_DAILY_REWARD = 500; // 500 $CASH/dia para Collection 1
-const NFT_COLLECTION2_DAILY_REWARD = 100; // 100 $CASH/dia para Collection 2
+const NFT_COLLECTION1_DAILY_REWARD = 150; // 150 $CASH/day for Collection 1
+const NFT_COLLECTION2_DAILY_REWARD = 50;  // 50 $CASH/day for Collection 2
 
 // Gang data
 const GANGS = [

@@ -10,7 +10,7 @@ const ERC1155_BALANCE_OF_ABI_HASH = '0x00fdd58e'; // balanceOf(address,uint256) 
 // Cache to store results of recent checks
 const nftCache = {
     data: {},
-    timeout: 60 * 60 * 1000, // 1 hour in ms
+    timeout: 15 * 60 * 1000, // 15 minutes in ms (was 60 minutes)
     get: function (key) {
         const entry = this.data[key];
         if (!entry) return null;

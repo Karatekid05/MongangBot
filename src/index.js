@@ -322,6 +322,12 @@ client.on('interactionCreate', async interaction => {
             handleBuyMarketButton(interaction);
         } else if (customId === 'market_buy_item') {
             handleMarketBuyItemButton(interaction);
+        } else if (customId === 'nft_verify_wallet') {
+            const verifier = require('./commands/nftVerifier');
+            await verifier.handleVerifyButton(interaction, client);
+        } else if (customId === 'nft_check_status') {
+            const verifier = require('./commands/nftVerifier');
+            await verifier.handleCheckStatus(interaction);
         }
     } else if (interaction.isStringSelectMenu()) {
         // Handle select menu interactions
@@ -329,6 +335,11 @@ client.on('interactionCreate', async interaction => {
 
         if (customId === 'market_select_item') {
             handleMarketSelectItem(interaction);
+        }
+    } else if (interaction.isModalSubmit()) {
+        if (interaction.customId === 'nft_wallet_modal') {
+            const verifier = require('./commands/nftVerifier');
+            await verifier.handleWalletModal(interaction, client);
         }
     } else if (interaction.isAutocomplete()) {
         const command = client.commands.get(interaction.commandName);
