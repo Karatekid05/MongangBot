@@ -14,6 +14,36 @@ const ERC165_SUPPORTS_INTERFACE = '0x01ffc9a7';
 const IFACE_ERC721 = '0x80ac58cd';
 const IFACE_ERC1155 = '0xd9b67a26';
 
+// Simple RPC concurrency limiter
+const RPC_CONCURRENCY = Number(process.env.NFT_RPC_CONCURRENCY || 5);
+let rpcActive = 0;
+const rpcQueue = [];
+function rpcCall(payload) {
+  return new Promise((resolve, reject) => {
+    const task = async () => {
+      try {
+        const res = await axios.post(MONAD_RPC_URL, payload);
+        resolve(res);
+      } catch (e) {
+        reject(e);
+      } finally {
+        rpcActive--;
+        if (rpcQueue.length > 0) {
+          const next = rpcQueue.shift();
+          rpcActive++;
+          next();
+        }
+      }
+    };
+    if (rpcActive < RPC_CONCURRENCY) {
+      rpcActive++;
+      task();
+    } else {
+      rpcQueue.push(task);
+    }
+  });
+}
+
 // Cache to store results of recent checks
 const nftCache = {
     data: {},
@@ -183,7 +213,7 @@ async function getNftsForCollection(address, contractAddress, tokenId = 0, optio
         if (is721) {
             const formattedAddr = address.slice(2).toLowerCase().padStart(64, '0');
             const data = `${ERC721_BALANCE_OF_ABI_HASH}000000000000000000000000${formattedAddr}`;
-            const resp = await axios.post(MONAD_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: contractAddress, data }, 'latest' ] });
+            const resp = await rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: contractAddress, data }, 'latest' ] });
             if (resp.data && resp.data.result) {
                 const count = parseInt(resp.data.result, 16) || 0;
                 nftCache.set(cacheKey, count);
@@ -197,7 +227,7 @@ async function getNftsForCollection(address, contractAddress, tokenId = 0, optio
             const tokenIdHex = probeId.toString(16).padStart(64, '0');
             const data = `${ERC1155_BALANCE_OF_ABI_HASH}${formattedAddr64}${tokenIdHex}`;
             try {
-                const resp = await axios.post(MONAD_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: contractAddress, data }, 'latest' ] });
+                const resp = await rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: contractAddress, data }, 'latest' ] });
                 if (resp.data && resp.data.result) {
                     const count = parseInt(resp.data.result, 16) || 0;
                     if (count > 0) {
@@ -214,7 +244,7 @@ async function getNftsForCollection(address, contractAddress, tokenId = 0, optio
         try {
             const formattedAddr = address.slice(2).toLowerCase().padStart(64, '0');
             const data = `${ERC721_BALANCE_OF_ABI_HASH}000000000000000000000000${formattedAddr}`;
-            const resp = await axios.post(MONAD_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: contractAddress, data }, 'latest' ] });
+            const resp = await rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: contractAddress, data }, 'latest' ] });
             if (resp.data && resp.data.result) {
                 const count = parseInt(resp.data.result, 16) || 0;
                 nftCache.set(cacheKey, count);
@@ -265,7 +295,7 @@ async function getERC721NftsForCollection(address, contractAddress) {
 
         // Use retry for ERC-721 calls as well
         const nftCount = await callWithRetry(async () => {
-            const response = await axios.post(MONAD_RPC_URL, {
+            const response = await rpcCall({
                 jsonrpc: '2.0',
                 id: 1,
                 method: 'eth_call',
@@ -332,7 +362,7 @@ async function supportsInterface(contractAddress, interfaceId) {
   try {
     const ifacePadded = interfaceId.replace('0x', '').padStart(64, '0');
     const data = `${ERC165_SUPPORTS_INTERFACE}${ifacePadded}`;
-    const resp = await axios.post(MONAD_RPC_URL, {
+    const resp = await rpcCall({
       jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: contractAddress, data }, 'latest' ]
     });
     if (resp.data && resp.data.result) {
@@ -361,7 +391,7 @@ async function hasCollection3Pass(address, options = {}) {
   try {
     const formattedAddr = addr.slice(2).toLowerCase().padStart(64, '0');
     const data = `${ERC721_BALANCE_OF_ABI_HASH}000000000000000000000000${formattedAddr}`;
-    const resp = await axios.post(MONAD_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] });
+    const resp = await rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] });
     if (resp.data && resp.data.result) {
       const count = parseInt(resp.data.result, 16) || 0;
       if (count > 0) { nftCache.set(cacheKey, true); return true; }
@@ -374,7 +404,7 @@ async function hasCollection3Pass(address, options = {}) {
       const tokenIdHex = tokenId.toString(16).padStart(64, '0');
       const data = `${ERC721_OWNER_OF}${tokenIdHex}`;
       try {
-        const resp = await axios.post(MONAD_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] });
+        const resp = await rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] });
         if (resp.data && resp.data.result && resp.data.result !== '0x') {
           // owner address is last 40 hex chars
           const ownerHex = '0x' + resp.data.result.slice(-40);
@@ -395,7 +425,7 @@ async function hasCollection3Pass(address, options = {}) {
     for (let probeId = 0; probeId <= 32; probeId++) {
       const tokenIdHex = probeId.toString(16).padStart(64, '0');
       const data = `${ERC1155_BALANCE_OF_ABI_HASH}${formattedAddr64}${tokenIdHex}`;
-      const resp = await axios.post(MONAD_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] });
+      const resp = await rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] });
       if (resp.data && resp.data.result) {
         const count = parseInt(resp.data.result, 16) || 0;
         if (count > 0) { nftCache.set(cacheKey, true); return true; }
@@ -423,7 +453,7 @@ async function checkTransactionVerification(fromAddress, toAddress, exactAmount)
         toAddress = toAddress.toLowerCase();
 
         // Get latest block
-        const response = await axios.post(MONAD_RPC_URL, {
+        const response = await rpcCall({
             jsonrpc: '2.0',
             id: 1,
             method: 'eth_blockNumber'
