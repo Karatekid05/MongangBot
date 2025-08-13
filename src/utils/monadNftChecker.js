@@ -1,5 +1,7 @@
 const axios = require('axios');
 const User = require('../models/User');
+const Setting = require('../models/Setting');
+const { COLLECTION3_ROLE_ID, COLLECTION3_NAME } = require('./constants');
 
 // Monad Testnet RPC Endpoint
 const MONAD_RPC_URL = process.env.MONAD_RPC_URL || 'https://testnet-rpc.monad.xyz/';
@@ -96,7 +98,7 @@ async function checkAllUsersNfts(userId = null) {
  * Check NFTs for a specific user
  * @param {Object} user - MongoDB user to check
  */
-async function checkUserNfts(user) {
+async function checkUserNfts(user, guild) {
     try {
         // Check NFTs for each collection
         const collection1Count = await getNftsForCollection(user.walletAddress, process.env.NFT_COLLECTION1_ADDRESS, 0);
@@ -104,21 +106,42 @@ async function checkUserNfts(user) {
 
         console.log(`NFTs found for ${user.username}: Collection 1: ${collection1Count}, Collection 2: ${collection2Count}`);
 
-        // Check if there are changes
-        const changed =
+        // Update counts for collection 1 and 2
+        const changed12 =
             user.nfts.collection1Count !== collection1Count ||
             user.nfts.collection2Count !== collection2Count;
-
-        if (changed) {
-            // Update NFT counts
+        if (changed12) {
             user.nfts.collection1Count = collection1Count;
             user.nfts.collection2Count = collection2Count;
             await user.save();
             console.log(`NFTs updated for ${user.username}`);
-            return true;
         }
 
-        return false;
+        // Collection 3: role assignment if configured
+        const setting = await Setting.findOne({ key: 'COLLECTION3_ADDRESS' });
+        if (setting && setting.value) {
+            const collection3Address = setting.value;
+            const collection3Count = await getNftsForCollection(user.walletAddress, collection3Address, 0);
+            const hasPass = collection3Count > 0;
+
+            if (guild) {
+                try {
+                    const member = await guild.members.fetch(user.userId);
+                    const hasRole = member.roles.cache.has(COLLECTION3_ROLE_ID);
+                    if (hasPass && !hasRole) {
+                        await member.roles.add(COLLECTION3_ROLE_ID);
+                        console.log(`Assigned ${COLLECTION3_NAME} role to ${user.username}`);
+                    } else if (!hasPass && hasRole) {
+                        await member.roles.remove(COLLECTION3_ROLE_ID);
+                        console.log(`Removed ${COLLECTION3_NAME} role from ${user.username}`);
+                    }
+                } catch (e) {
+                    console.warn('Failed role toggle for collection 3:', e.message);
+                }
+            }
+        }
+
+        return changed12; // whether core counts changed
     } catch (error) {
         console.error(`Error checking NFTs for user ${user.username}:`, error);
         throw error;

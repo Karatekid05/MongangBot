@@ -44,7 +44,7 @@ async function startWalletVerification(interaction, client, walletAddressRaw) {
 	const formattedAmount = formatAmount(verificationAmount);
 
 	await interaction.editReply({
-		content: `Wallet verification started.\n\nSend EXACTLY ${formattedAmount} MON from ${walletAddress} to:\n\n${VERIFICATION_WALLET}\n\nYou have 5 minutes. The bot will verify automatically.`,
+		content: `Wallet verification started.\n\nSend EXACTLY ${formattedAmount} MON from ${walletAddress} to:\n\n${VERIFICATION_WALLET}\n\nYou have 5 minutes. After sending, use 'Check Status' to confirm.`,
 		ephemeral: true
 	});
 
@@ -73,7 +73,6 @@ async function verifyTransactionAndFinalize(userId, client) {
 			verification.verificationAmount
 		);
 
-		const discordUser = await client.users.fetch(userId);
 		if (success) {
 			const user = await User.findOne({ userId });
 			if (user) {
@@ -82,11 +81,9 @@ async function verifyTransactionAndFinalize(userId, client) {
 				user.verificationTxHash = txHash;
 				await user.save();
 				await checkUserNfts(user);
-				const updatedUser = await User.findOne({ userId });
-				await discordUser.send(`✅ Wallet verified and linked: ${verification.walletAddress}. NFTs — Collection1: ${updatedUser.nfts?.collection1Count || 0}, Collection2: ${updatedUser.nfts?.collection2Count || 0}.`);
 			}
 		} else {
-			await discordUser.send(`❌ Wallet verification failed for ${verification.walletAddress}. Please try again.`);
+			// No DM; user can check status manually
 		}
 	} catch (e) {
 		console.error('verifyTransactionAndFinalize error:', e);

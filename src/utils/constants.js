@@ -6,6 +6,10 @@ const MESSAGE_COOLDOWN_MS = 30 * 1000; // 30 seconds
 const NFT_COLLECTION1_DAILY_REWARD = 150; // 150 $CASH/day for Collection 1
 const NFT_COLLECTION2_DAILY_REWARD = 50;  // 50 $CASH/day for Collection 2
 
+// Collection 3 (HaHa x MonGang Pass) role assignment (no cash)
+const COLLECTION3_NAME = 'HaHa x MonGang Pass';
+const COLLECTION3_ROLE_ID = '1402656276441469050';
+
 // Gang data
 const GANGS = [
     {
@@ -98,6 +102,8 @@ module.exports = {
     ADDITIONAL_CHAT_CHANNELS,
     FASTSHOTER_ROLE_ID,
     CAPO_ROLE_ID,
+    COLLECTION3_NAME,
+    COLLECTION3_ROLE_ID,
     getUserGangWithPriority,
     getUserGangRoles
 }; 

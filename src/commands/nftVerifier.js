@@ -1,8 +1,18 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { startWalletVerification, getUserNftStatus, VERIFICATION_WALLET } = require('../utils/walletVerification');
-const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD } = require('../utils/constants');
+const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD, COLLECTION3_NAME } = require('../utils/constants');
 const User = require('../models/User');
 const { checkUserNfts } = require('../utils/monadNftChecker');
+const Setting = require('../models/Setting');
+
+// cooldown map for status checks (per user)
+const statusCooldown = new Map();
+const DEFAULT_STATUS_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes fallback
+
+async function getStatusCooldownMs() {
+	const s = await Setting.findOne({ key: 'NFT_STATUS_COOLDOWN_MS' });
+	return s ? Number(s.value) : DEFAULT_STATUS_COOLDOWN_MS;
+}
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -27,13 +37,14 @@ module.exports = {
 					`Verify your wallet to receive NFT rewards.\n\n` +
 					`• Rewards:\n` +
 					`  Collection 1 — ${NFT_COLLECTION1_DAILY_REWARD} $CASH/day\n` +
-					`  Collection 2 — ${NFT_COLLECTION2_DAILY_REWARD} $CASH/day.\n\n` +
+					`  Collection 2 — ${NFT_COLLECTION2_DAILY_REWARD} $CASH/day.\n` +
+					`  ${COLLECTION3_NAME} — <@&1402656276441469050>\n\n` +
 					`Status Check:\n` +
 					`Use the 'Check Status' button to view your:\n` +
 					`• Current NFT holdings\n` +
 					`• Verification status\n\n` +
-					`Note: NFT holdings are automatically synced daily, but you can force a sync by checking your status.\n\n` +
-					`Verification will require sending a tiny unique amount of MON to: ${VERIFICATION_WALLET}`
+					`Verification will require sending a tiny unique amount of MON to: ${VERIFICATION_WALLET}` +
+					`Note: NFT holdings are automatically synced daily, but you can force a sync by checking your status.\n\n`
 				)
 				.setTimestamp();
 
@@ -82,6 +93,16 @@ module.exports = {
 
 	async handleCheckStatus(interaction) {
 		try {
+			const cooldownMs = await getStatusCooldownMs();
+			const now = Date.now();
+			const last = statusCooldown.get(interaction.user.id) || 0;
+			if (now - last < cooldownMs) {
+				const remainingMs = cooldownMs - (now - last);
+				const mins = Math.ceil(remainingMs / 60000);
+				return interaction.reply({ content: `Please wait ${mins} minute(s) before checking again.`, ephemeral: true });
+			}
+
+			statusCooldown.set(interaction.user.id, now);
 			await interaction.deferReply({ ephemeral: true });
 
 			// Force a sync of NFTs before reporting status
@@ -102,8 +123,7 @@ module.exports = {
 				`Collection 1: ${status.c1} NFTs (${NFT_COLLECTION1_DAILY_REWARD} $CASH/day)\n` +
 				`Collection 2: ${status.c2} NFTs (${NFT_COLLECTION2_DAILY_REWARD} $CASH/day)\n` +
 				`Assigned role tier: ${roleTier}\n` +
-				`Verification status: ${verifiedText}\n\n` +
-				`Note: Token balances are automatically synced daily, but you can force a sync by checking your status.`
+				`Verification status: ${verifiedText}`
 			);
 		} catch (e) {
 			console.error('handleCheckStatus error:', e);

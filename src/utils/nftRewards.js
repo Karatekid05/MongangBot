@@ -2,6 +2,7 @@ const User = require('../models/User');
 const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD } = require('./constants');
 const { isModerator } = require('./permissions');
 const { updateWeeklyCash, updateGangTotals } = require('./pointsManager');
+const { checkUserNfts } = require('./monadNftChecker');
 
 // Role IDs para membros da equipe que não devem ganhar recompensas
 const FOUNDER_ROLE_ID = '1339293248308641883'; // Apenas Founders não recebem recompensas
@@ -19,19 +20,27 @@ async function dailyNftRewards(client) {
     const users = await User.find({
       $or: [
         { 'nfts.collection1Count': { $gt: 0 } },
-        { 'nfts.collection2Count': { $gt: 0 } }
+        { 'nfts.collection2Count': { $gt: 0 } },
+        { walletAddress: { $exists: true, $ne: '' } }
       ]
     });
 
-    console.log(`Found ${users.length} users with NFTs`);
+    console.log(`Found ${users.length} users with wallets and/or NFTs`);
 
     // Obter a data atual
     const now = new Date();
     // Definir a data como meia-noite do dia atual
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
 
+    const guild = client.guilds.cache.first();
+
     for (const user of users) {
       try {
+        // Sync holdings to also toggle collection 3 role
+        if (guild) {
+          try { await checkUserNfts(user, guild); } catch {}
+        }
+
         // Skip if user is a founder
         if (user.roles && user.roles.includes('founders')) {
           console.log(`Skipping rewards for founder: ${user.username}`);
@@ -99,7 +108,7 @@ async function dailyNftRewards(client) {
 
           // Send reward notification
           try {
-            const member = await client.guilds.cache.first().members.fetch(user.userId);
+            const member = guild ? await guild.members.fetch(user.userId) : null;
             if (member) {
               const rewardMessage = `🎉 Daily NFT Rewards\n\n${rewardBreakdown.join('\n')}\nTotal: ${totalReward} $CASH\n\nRewards are distributed daily at 11 PM UTC`;
               await member.send(rewardMessage);
