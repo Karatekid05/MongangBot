@@ -9,6 +9,7 @@ const MONAD_RPC_URL = process.env.MONAD_RPC_URL || 'https://testnet-rpc.monad.xy
 // ABI for ERC-1155 balanceOf function (simplified for use with JSON-RPC)
 const ERC1155_BALANCE_OF_ABI_HASH = '0x00fdd58e'; // balanceOf(address,uint256) function signature
 const ERC721_BALANCE_OF_ABI_HASH = '0x70a08231'; // balanceOf(address)
+const ERC721_OWNER_OF = '0x6352211e'; // ownerOf(uint256)
 const ERC165_SUPPORTS_INTERFACE = '0x01ffc9a7';
 const IFACE_ERC721 = '0x80ac58cd';
 const IFACE_ERC1155 = '0xd9b67a26';
@@ -126,9 +127,7 @@ async function checkUserNfts(user, guild, options = {}) {
         // Collection 3: role assignment based on static contract
         const collection3Address = COLLECTION3_CONTRACT_ADDRESS;
         if (collection3Address) {
-            const collection3Count = await getNftsForCollection(user.walletAddress, collection3Address, 0, options);
-            const hasPass = collection3Count > 0;
-
+            const hasPass = await hasCollection3Pass(user.walletAddress, options);
             if (guild) {
                 try {
                     const member = await guild.members.fetch(user.userId);
@@ -358,7 +357,7 @@ async function hasCollection3Pass(address, options = {}) {
     if (cached !== null) return cached;
   }
 
-  // Try ERC721 balanceOf first (some contracts expose aggregated balances)
+  // Try ERC721 balanceOf aggregator
   try {
     const formattedAddr = addr.slice(2).toLowerCase().padStart(64, '0');
     const data = `${ERC721_BALANCE_OF_ABI_HASH}000000000000000000000000${formattedAddr}`;
@@ -369,21 +368,40 @@ async function hasCollection3Pass(address, options = {}) {
     }
   } catch {}
 
-  // Assume ERC1155 multi-id and probe ids 0..777
-  const formattedAddr64 = addr.slice(2).toLowerCase().padStart(64, '0');
-  for (let probeId = 0; probeId <= 777; probeId++) {
-    const tokenIdHex = probeId.toString(16).padStart(64, '0');
-    const data = `${ERC1155_BALANCE_OF_ABI_HASH}${formattedAddr64}${tokenIdHex}`;
-    try {
+  // Deep scan via ownerOf over tokenIds 0..777 (early exit)
+  try {
+    for (let tokenId = 0; tokenId <= 777; tokenId++) {
+      const tokenIdHex = tokenId.toString(16).padStart(64, '0');
+      const data = `${ERC721_OWNER_OF}${tokenIdHex}`;
+      try {
+        const resp = await axios.post(MONAD_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] });
+        if (resp.data && resp.data.result && resp.data.result !== '0x') {
+          // owner address is last 40 hex chars
+          const ownerHex = '0x' + resp.data.result.slice(-40);
+          if (ownerHex.toLowerCase() === addr.toLowerCase()) {
+            nftCache.set(cacheKey, true);
+            return true;
+          }
+        }
+      } catch {
+        // ignore and continue
+      }
+    }
+  } catch {}
+
+  // ERC1155 multi-id as last attempt
+  try {
+    const formattedAddr64 = addr.slice(2).toLowerCase().padStart(64, '0');
+    for (let probeId = 0; probeId <= 32; probeId++) {
+      const tokenIdHex = probeId.toString(16).padStart(64, '0');
+      const data = `${ERC1155_BALANCE_OF_ABI_HASH}${formattedAddr64}${tokenIdHex}`;
       const resp = await axios.post(MONAD_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] });
       if (resp.data && resp.data.result) {
         const count = parseInt(resp.data.result, 16) || 0;
         if (count > 0) { nftCache.set(cacheKey, true); return true; }
       }
-    } catch {
-      // continue
     }
-  }
+  } catch {}
 
   nftCache.set(cacheKey, false);
   return false;
