@@ -1,5 +1,8 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { startWalletVerification, getUserNftStatus, VERIFICATION_WALLET } = require('../utils/walletVerification');
+const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD } = require('../utils/constants');
+const User = require('../models/User');
+const { checkUserNfts } = require('../utils/monadNftChecker');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -19,11 +22,19 @@ module.exports = {
 			// Build verifier embed
 			const embed = new EmbedBuilder()
 				.setColor('#2F3136')
-				.setTitle('Welcome to the MonGang NFT Verifier')
+				.setTitle('Welcome to the Mongang NFT Verifier')
 				.setDescription(
-					"Verify your wallet to receive NFT rewards.\n\n" +
-					"• Daily rewards: Collection 1 — 150 $CASH, Collection 2 — 50 $CASH.\n" +
-					`• Verification requires sending a tiny unique amount of MON to: ${VERIFICATION_WALLET}`
+					`Verify your wallet to receive NFT rewards.\n\n` +
+					`• Rewards:\n` +
+					`  Collection 1 — ${NFT_COLLECTION1_DAILY_REWARD} $CASH/day\n` +
+					`  Collection 2 — ${NFT_COLLECTION2_DAILY_REWARD} $CASH/day.\n\n` +
+					`Status Check:\n` +
+					`Use the 'Check Status' button to view your:\n` +
+					`• Current token balances\n` +
+					`• Assigned role tier\n` +
+					`• Verification status\n\n` +
+					`Note: Token balances are automatically synced daily, but you can force a sync by checking your status.\n\n` +
+					`Verification requires sending a tiny unique amount of MON to: ${VERIFICATION_WALLET}`
 				)
 				.setTimestamp();
 
@@ -73,12 +84,27 @@ module.exports = {
 	async handleCheckStatus(interaction) {
 		try {
 			await interaction.deferReply({ ephemeral: true });
-			const status = await getUserNftStatus(interaction.user.id);
-			if (!status.hasWallet) {
-				return interaction.editReply('No wallet linked yet. Click Verify Wallet to start.');
+
+			// Force a sync of NFTs before reporting status
+			const user = await User.findOne({ userId: interaction.user.id });
+			if (user && user.walletAddress) {
+				try { await checkUserNfts(user); } catch {}
 			}
+
+			const status = await getUserNftStatus(interaction.user.id);
+			const verifiedText = user?.walletVerified ? 'Verified' : 'Not verified';
+			let roleTier = 'None';
+			if (status.c1 > 0 && status.c2 > 0) roleTier = 'Both Collections';
+			else if (status.c1 > 0) roleTier = 'Collection 1 Holder';
+			else if (status.c2 > 0) roleTier = 'Collection 2 Holder';
+
 			await interaction.editReply(
-				`Wallet: ${status.walletAddress}\nCollection 1: ${status.c1} NFTs (150 $CASH/day if > 0)\nCollection 2: ${status.c2} NFTs (50 $CASH/day if > 0)`
+				`Wallet: ${status.hasWallet ? status.walletAddress : 'Not linked'}\n` +
+				`Collection 1: ${status.c1} NFTs (${NFT_COLLECTION1_DAILY_REWARD} $CASH/day)\n` +
+				`Collection 2: ${status.c2} NFTs (${NFT_COLLECTION2_DAILY_REWARD} $CASH/day)\n` +
+				`Assigned role tier: ${roleTier}\n` +
+				`Verification status: ${verifiedText}\n\n` +
+				`Note: Token balances are automatically synced daily, but you can force a sync by checking your status.`
 			);
 		} catch (e) {
 			console.error('handleCheckStatus error:', e);
