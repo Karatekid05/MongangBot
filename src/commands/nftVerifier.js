@@ -2,7 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder
 const { startWalletVerification, getUserNftStatus, VERIFICATION_WALLET } = require('../utils/walletVerification');
 const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD, COLLECTION3_NAME } = require('../utils/constants');
 const User = require('../models/User');
-const { checkUserNfts } = require('../utils/monadNftChecker');
+const { checkUserNfts, getNftsForCollection } = require('../utils/monadNftChecker');
 const Setting = require('../models/Setting');
 
 // cooldown map for status checks (per user)
@@ -35,10 +35,10 @@ module.exports = {
 				.setTitle('Welcome to the Mongang NFT Verifier')
 				.setDescription(
 					`Verify your wallet to receive NFT rewards.\n\n` +
-					`• Rewards:\n` +
-					`  Collection 1 — ${NFT_COLLECTION1_DAILY_REWARD} $CASH/day\n` +
-					`  Collection 2 — ${NFT_COLLECTION2_DAILY_REWARD} $CASH/day.\n` +
-					`  ${COLLECTION3_NAME} — <@&1402656276441469050>\n\n` +
+					`Rewards:\n` +
+					`• Collection 1 — ${NFT_COLLECTION1_DAILY_REWARD} $CASH/day\n` +
+					`• Collection 2 — ${NFT_COLLECTION2_DAILY_REWARD} $CASH/day.\n` +
+					`• ${COLLECTION3_NAME} — <@&1402656276441469050>\n\n` +
 					`Status Check:\n` +
 					`Use the 'Check Status' button to view your:\n` +
 					`• Current NFT holdings\n` +
@@ -108,23 +108,38 @@ module.exports = {
 			// Force a sync of NFTs before reporting status
 			const user = await User.findOne({ userId: interaction.user.id });
 			if (user && user.walletAddress) {
-				try { await checkUserNfts(user); } catch {}
+				try { await checkUserNfts(user, interaction.guild); } catch {}
 			}
 
 			const status = await getUserNftStatus(interaction.user.id);
 			const verifiedText = user?.walletVerified ? 'Verified' : 'Not verified';
-			let roleTier = 'None';
-			if (status.c1 > 0 && status.c2 > 0) roleTier = 'Both Collections';
-			else if (status.c1 > 0) roleTier = 'Collection 1 Holder';
-			else if (status.c2 > 0) roleTier = 'Collection 2 Holder';
 
-			await interaction.editReply(
-				`Wallet: ${status.hasWallet ? status.walletAddress : 'Not linked'}\n` +
-				`Collection 1: ${status.c1} NFTs (${NFT_COLLECTION1_DAILY_REWARD} $CASH/day)\n` +
-				`Collection 2: ${status.c2} NFTs (${NFT_COLLECTION2_DAILY_REWARD} $CASH/day)\n` +
-				`Assigned role tier: ${roleTier}\n` +
+			// Collection 3 line based on NFT holdings
+			const c3Setting = await Setting.findOne({ key: 'COLLECTION3_ADDRESS' });
+			let c3Line = `<@&1402656276441469050> not live yet`;
+			if (c3Setting && c3Setting.value) {
+				let hasPass = false;
+				if (user && user.walletAddress) {
+					try {
+						const c3Count = await getNftsForCollection(user.walletAddress, c3Setting.value, 0);
+						hasPass = c3Count > 0;
+					} catch {}
+				}
+				c3Line = hasPass ? `<@&1402656276441469050> assigned` : `<@&1402656276441469050> not assigned/removed.`;
+			}
+
+			const lines = [
+				`Wallet: ${status.hasWallet ? status.walletAddress : 'Not linked'}`,
+				'',
+				`Collection 1: ${status.c1} NFTs (${NFT_COLLECTION1_DAILY_REWARD} $CASH/day)`,
+				`Collection 2: ${status.c2} NFTs (${NFT_COLLECTION2_DAILY_REWARD} $CASH/day)`,
+				'',
+				c3Line,
+				'',
 				`Verification status: ${verifiedText}`
-			);
+			];
+
+			await interaction.editReply(lines.join('\n'));
 		} catch (e) {
 			console.error('handleCheckStatus error:', e);
 			await interaction.editReply({ content: 'Error checking status.', ephemeral: true });
