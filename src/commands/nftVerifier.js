@@ -43,7 +43,7 @@ module.exports = {
 					`Use the 'Check Status' button to view your:\n` +
 					`• Current NFT holdings\n` +
 					`• Verification status\n\n` +
-					`Verification will require sending a tiny unique amount of MON to: ${VERIFICATION_WALLET}` +
+					`Verification will require sending a tiny unique amount of MON to: ${VERIFICATION_WALLET}\n\n` +
 					`Note: NFT holdings are automatically synced daily, but you can force a sync by checking your status.\n\n`
 				)
 				.setTimestamp();
