@@ -8,6 +8,10 @@ const MONAD_RPC_URL = process.env.MONAD_RPC_URL || 'https://testnet-rpc.monad.xy
 
 // ABI for ERC-1155 balanceOf function (simplified for use with JSON-RPC)
 const ERC1155_BALANCE_OF_ABI_HASH = '0x00fdd58e'; // balanceOf(address,uint256) function signature
+const ERC721_BALANCE_OF_ABI_HASH = '0x70a08231'; // balanceOf(address)
+const ERC165_SUPPORTS_INTERFACE = '0x01ffc9a7';
+const IFACE_ERC721 = '0x80ac58cd';
+const IFACE_ERC1155 = '0xd9b67a26';
 
 // Cache to store results of recent checks
 const nftCache = {
@@ -173,68 +177,57 @@ async function getNftsForCollection(address, contractAddress, tokenId = 0, optio
             }
         }
 
-        // Adjust address format for the call (remove 0x and pad to 64 characters)
-        const formattedAddress = address.startsWith('0x')
-            ? address.slice(2).toLowerCase().padStart(64, '0')
-            : address.toLowerCase().padStart(64, '0');
+        // Detect standard via ERC165
+        const is721 = await supportsInterface(contractAddress, IFACE_ERC721);
+        const is1155 = !is721 ? await supportsInterface(contractAddress, IFACE_ERC1155) : false;
 
-        // Format tokenId to hexadecimal and pad to 64 characters
-        const tokenIdHex = tokenId.toString(16).padStart(64, '0');
-
-        // Create data for ERC-1155 balanceOf(address,uint256) call
-        const balanceOfData = `${ERC1155_BALANCE_OF_ABI_HASH}${formattedAddress}${tokenIdHex}`;
-
-        console.log(`Checking ERC-1155 NFT for ${address} in contract ${contractAddress}, tokenId ${tokenId}`);
-
-        // Try to call the API with retry and exponential backoff
-        const nftCount = await callWithRetry(async () => {
-            const response = await axios.post(MONAD_RPC_URL, {
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'eth_call',
-                params: [
-                    {
-                        to: contractAddress,
-                        data: balanceOfData
-                    },
-                    'latest'
-                ]
-            });
-
-            if (response.data && response.data.result) {
-                const count = parseInt(response.data.result, 16);
-                console.log(`User has ${count} NFTs in collection ${contractAddress}, tokenId ${tokenId}`);
+        if (is721) {
+            const formattedAddr = address.slice(2).toLowerCase().padStart(64, '0');
+            const data = `${ERC721_BALANCE_OF_ABI_HASH}000000000000000000000000${formattedAddr}`;
+            const resp = await axios.post(MONAD_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: contractAddress, data }, 'latest' ] });
+            if (resp.data && resp.data.result) {
+                const count = parseInt(resp.data.result, 16) || 0;
+                nftCache.set(cacheKey, count);
                 return count;
-            } else if (response.data && response.data.error) {
-                console.log(`Method 1 failed: ${JSON.stringify(response.data.error)}`);
-                throw new Error(`ERC-1155 check failed: ${JSON.stringify(response.data.error)}`);
-            } else {
-                console.warn(`Unexpected response: ${JSON.stringify(response.data)}`);
-                throw new Error('Unexpected response');
             }
-        }, 3);
-
-        // Store result in cache
-        nftCache.set(cacheKey, nftCount);
-        return nftCount;
-    } catch (error) {
-        console.error(`Error checking NFTs (ERC-1155) for ${address}:`, error.message);
-        console.log(`Trying alternative NFT query for ${address}`);
-
-        // Fallback for ERC-721
-        try {
-            const nftCount = await getERC721NftsForCollection(address, contractAddress);
-            nftCache.set(`${address}-${contractAddress}-${tokenId}`, nftCount);
-            return nftCount;
-        } catch (fallbackError) {
-            console.error('Fallback also failed:', fallbackError.message);
-            if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
-                console.log('Simulating query to Monad explorer for', address);
-                console.warn('WARNING: Assuming user has NFTs for test purposes');
-                return 0;
-            }
-            return 0;
         }
+
+        // Try ERC-1155: probe a small range of tokenIds (0..4)
+        const formattedAddr64 = address.slice(2).toLowerCase().padStart(64, '0');
+        for (let probeId of [tokenId, 0, 1, 2, 3, 4]) {
+            const tokenIdHex = probeId.toString(16).padStart(64, '0');
+            const data = `${ERC1155_BALANCE_OF_ABI_HASH}${formattedAddr64}${tokenIdHex}`;
+            try {
+                const resp = await axios.post(MONAD_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: contractAddress, data }, 'latest' ] });
+                if (resp.data && resp.data.result) {
+                    const count = parseInt(resp.data.result, 16) || 0;
+                    if (count > 0) {
+                        nftCache.set(cacheKey, count);
+                        return count;
+                    }
+                }
+            } catch (e) {
+                // continue probing
+            }
+        }
+
+        // Fallback to 721 one more time if unknown
+        try {
+            const formattedAddr = address.slice(2).toLowerCase().padStart(64, '0');
+            const data = `${ERC721_BALANCE_OF_ABI_HASH}000000000000000000000000${formattedAddr}`;
+            const resp = await axios.post(MONAD_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: contractAddress, data }, 'latest' ] });
+            if (resp.data && resp.data.result) {
+                const count = parseInt(resp.data.result, 16) || 0;
+                nftCache.set(cacheKey, count);
+                return count;
+            }
+        } catch {}
+
+        nftCache.set(cacheKey, 0);
+        return 0;
+    } catch (error) {
+        console.error(`Error checking NFTs for ${address}:`, error.message);
+        return 0;
     }
 }
 
@@ -334,6 +327,24 @@ async function callWithRetry(operation, maxRetries = 3) {
 
     // If all attempts fail, throw the last error
     throw lastError || new Error('Operation failed after retries');
+}
+
+async function supportsInterface(contractAddress, interfaceId) {
+  try {
+    const ifacePadded = interfaceId.replace('0x', '').padStart(64, '0');
+    const data = `${ERC165_SUPPORTS_INTERFACE}${ifacePadded}`;
+    const resp = await axios.post(MONAD_RPC_URL, {
+      jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: contractAddress, data }, 'latest' ]
+    });
+    if (resp.data && resp.data.result) {
+      const res = resp.data.result;
+      // non-zero means true
+      return res !== '0x' && parseInt(res, 16) !== 0;
+    }
+  } catch (e) {
+    // ignore, treat as unknown
+  }
+  return false;
 }
 
 /**
