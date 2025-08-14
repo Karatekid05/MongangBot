@@ -14,14 +14,48 @@ const ERC165_SUPPORTS_INTERFACE = '0x01ffc9a7';
 const IFACE_ERC721 = '0x80ac58cd';
 const IFACE_ERC1155 = '0xd9b67a26';
 
-// Simple RPC concurrency limiter
+// Simple RPC concurrency limiter + per-second rate limiter to avoid 429s
 const RPC_CONCURRENCY = Number(process.env.NFT_RPC_CONCURRENCY || 5);
+const RPC_RPS_LIMIT = Number(process.env.NFT_RPC_RPS_LIMIT || 20); // keep well under 25/sec
+
 let rpcActive = 0;
 const rpcQueue = [];
+
+let rateTokens = RPC_RPS_LIMIT;
+let lastRefillMs = Date.now();
+
+function refillRateTokens() {
+  const now = Date.now();
+  if (now - lastRefillMs >= 1000) {
+    rateTokens = RPC_RPS_LIMIT;
+    lastRefillMs = now;
+  }
+}
+
+async function waitForRateToken() {
+  // Busy-wait with small sleeps until a token is available
+  // Keeps total requests <= RPC_RPS_LIMIT per second across the process
+  // Also handles dynamic refills each second
+  // We keep the sleep short to not add too much latency
+  // This is simple and robust enough for our use case
+  // If RPC_RPS_LIMIT is 0 or negative, default to 10
+  const effectiveLimit = RPC_RPS_LIMIT > 0 ? RPC_RPS_LIMIT : 10;
+  while (true) {
+    refillRateTokens();
+    if (rateTokens > 0) {
+      rateTokens--;
+      return;
+    }
+    const timeToNextSecond = Math.max(10, 1000 - (Date.now() - lastRefillMs));
+    await new Promise(resolve => setTimeout(resolve, Math.min(50, timeToNextSecond)));
+  }
+}
+
 function rpcCall(payload) {
   return new Promise((resolve, reject) => {
     const task = async () => {
       try {
+        await waitForRateToken();
         const res = await axios.post(MONAD_RPC_URL, payload);
         resolve(res);
       } catch (e) {
