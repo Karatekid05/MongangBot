@@ -33,71 +33,139 @@ async function startWalletVerification(interaction, client, walletAddressRaw) {
 		return { ok: false, reason: 'address_in_use' };
 	}
 
-	// Ensure user exists (auto-create if needed)
-	let user = await User.findOne({ userId: interaction.user.id });
-	if (!user) {
-		user = new User({
-			userId: interaction.user.id,
-			username: interaction.user.username,
-			cash: 0,
-			weeklyCash: 0,
-			pointsBySource: { games: 0, memesAndArt: 0, chatActivity: 0, others: 0, nftRewards: 0 },
-			weeklyPointsBySource: { games: 0, memesAndArt: 0, chatActivity: 0, others: 0, nftRewards: 0 },
-			nfts: { collection1Count: 0, collection2Count: 0 }
-		});
-		try { await user.save(); } catch {}
-	}
+    // Ensure user exists (auto-create if needed) and persist pending verification info
+    let user = await User.findOne({ userId: interaction.user.id });
+    if (!user) {
+        user = new User({
+            userId: interaction.user.id,
+            username: interaction.user.username,
+            cash: 0,
+            weeklyCash: 0,
+            pointsBySource: { games: 0, memesAndArt: 0, chatActivity: 0, others: 0, nftRewards: 0 },
+            weeklyPointsBySource: { games: 0, memesAndArt: 0, chatActivity: 0, others: 0, nftRewards: 0 },
+            nfts: { collection1Count: 0, collection2Count: 0 }
+        });
+    }
 
-	const verificationAmount = generateVerificationAmount();
-	const formattedAmount = formatAmount(verificationAmount);
+    const verificationAmount = generateVerificationAmount();
+    const formattedAmount = formatAmount(verificationAmount);
+
+    // Persist pending verification to DB so we don't lose it on restarts
+    try {
+        user.walletAddress = walletAddress.toLowerCase();
+        user.walletVerified = false;
+        user.verificationPending = true;
+        user.verificationAmount = verificationAmount;
+        user.verificationTimestamp = new Date();
+        await user.save();
+    } catch {}
 
 	await interaction.editReply({
 		content: `Wallet verification started.\n\nSend EXACTLY ${formattedAmount} MON from ${walletAddress} to:\n\n${VERIFICATION_WALLET}\n\nYou have 5 minutes. After sending, use 'Check Status' to confirm.`,
 		ephemeral: true
 	});
 
-	pendingVerifications.set(interaction.user.id, {
+	// Set pending verification with polling interval
+    const pending = {
 		walletAddress: walletAddress.toLowerCase(),
 		verificationAmount,
 		timestamp: Date.now(),
+		deadline: Date.now() + VERIFICATION_TIMEOUT_MS,
+        guildId: interaction.guild?.id || null,
 		interactionId: interaction.id,
-		channelId: interaction.channelId
-	});
+		channelId: interaction.channelId,
+		intervalId: null,
+		timeoutId: null
+	};
 
-	setTimeout(async () => {
-		await verifyTransactionAndFinalize(interaction.user.id, client);
+	// Poll every 15s until success or timeout
+	pending.intervalId = setInterval(async () => {
+		try {
+			const ok = await attemptVerifyTransaction(interaction.user.id, client);
+			if (ok) {
+				clearInterval(pending.intervalId);
+				clearTimeout(pending.timeoutId);
+				pendingVerifications.delete(interaction.user.id);
+			}
+		} catch {}
+	}, 15 * 1000);
+
+	// Hard timeout handler (no DMs – user will use Check Status button)
+	pending.timeoutId = setTimeout(async () => {
+		try {
+			const ok = await attemptVerifyTransaction(interaction.user.id, client);
+			// If not ok, we'll rely on the user pressing Check Status to retry
+		} finally {
+			clearInterval(pending.intervalId);
+			pendingVerifications.delete(interaction.user.id);
+		}
 	}, VERIFICATION_TIMEOUT_MS);
+
+	pendingVerifications.set(interaction.user.id, pending);
 
 	return { ok: true, amount: formattedAmount };
 }
 
-async function verifyTransactionAndFinalize(userId, client) {
-	const verification = pendingVerifications.get(userId);
-	if (!verification) return;
+// Attempt a verification check once. Returns true if verified; false otherwise. Does not clear pending state on failure.
+async function attemptVerifyTransaction(userId, client) {
+    let verification = pendingVerifications.get(userId);
+    let fromAddress;
+    let exactAmount;
+    if (!verification) {
+        // Fallback to DB-stored pending data
+        const user = await User.findOne({ userId });
+        if (!user || !user.verificationPending || !user.walletAddress || !user.verificationAmount) {
+            return false;
+        }
+        fromAddress = user.walletAddress;
+        exactAmount = user.verificationAmount;
+    } else {
+        fromAddress = verification.walletAddress;
+        exactAmount = verification.verificationAmount;
+    }
 	try {
 		const { success, txHash } = await require('./monadNftChecker').checkTransactionVerification(
-			verification.walletAddress,
+            fromAddress,
 			VERIFICATION_WALLET,
-			verification.verificationAmount
+            exactAmount
 		);
 
-		if (success) {
+        if (success) {
 			const user = await User.findOne({ userId });
 			if (user) {
-				user.walletAddress = verification.walletAddress;
+                user.walletAddress = fromAddress;
 				user.walletVerified = true;
 				user.verificationTxHash = txHash;
+                user.verificationPending = false;
+                user.verificationAmount = 0;
+                user.verificationTimestamp = null;
 				await user.save();
-				await checkUserNfts(user, null, { bypassCache: true });
+                // If we know the guild, pass it so roles can be toggled immediately
+                let guild = null;
+                try {
+                    const pv = pendingVerifications.get(userId);
+                    if (pv?.guildId) {
+                        guild = await client.guilds.fetch(pv.guildId);
+                    }
+                } catch {}
+                await checkUserNfts(user, guild, { bypassCache: true });
 			}
-		} else {
-			// No DM; user can check status manually
+
+			return true;
 		}
 	} catch (e) {
-		console.error('verifyTransactionAndFinalize error:', e);
-	} finally {
-		pendingVerifications.delete(userId);
+		console.error('attemptVerifyTransaction error:', e);
 	}
+	return false;
+}
+
+// Expose a manual trigger for status button
+async function triggerVerifyNow(userId, client) {
+	return await attemptVerifyTransaction(userId, client);
+}
+
+function hasPendingVerification(userId) {
+    return pendingVerifications.has(userId);
 }
 
 async function getUserNftStatus(userId) {
@@ -114,5 +182,7 @@ async function getUserNftStatus(userId) {
 module.exports = {
 	startWalletVerification,
 	getUserNftStatus,
-	VERIFICATION_WALLET
+	VERIFICATION_WALLET,
+	triggerVerifyNow,
+	hasPendingVerification
 };

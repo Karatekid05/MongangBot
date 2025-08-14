@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { startWalletVerification, getUserNftStatus, VERIFICATION_WALLET } = require('../utils/walletVerification');
+const { startWalletVerification, getUserNftStatus, VERIFICATION_WALLET, triggerVerifyNow, hasPendingVerification } = require('../utils/walletVerification');
 const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD, COLLECTION3_NAME, COLLECTION3_CONTRACT_ADDRESS } = require('../utils/constants');
 const User = require('../models/User');
 const { checkUserNfts, getNftsForCollection, hasCollection3Pass } = require('../utils/monadNftChecker');
@@ -88,21 +88,33 @@ module.exports = {
 		}
 	},
 
-	async handleCheckStatus(interaction) {
+    async handleCheckStatus(interaction) {
 		try {
-			const cooldownMs = await getStatusCooldownMs();
-			const now = Date.now();
-			const last = statusCooldown.get(interaction.user.id) || 0;
-			if (now - last < cooldownMs) {
-				const remainingMs = cooldownMs - (now - last);
-				const mins = Math.ceil(remainingMs / 60000);
-				return interaction.reply({ content: `Please wait ${mins} minute(s) before checking again.`, ephemeral: true });
-			}
+            const cooldownMs = await getStatusCooldownMs();
+            const now = Date.now();
+            const last = statusCooldown.get(interaction.user.id) || 0;
 
-			statusCooldown.set(interaction.user.id, now);
-			await interaction.deferReply({ ephemeral: true });
+            // Preload user to know if there is a DB-persisted pending verification
+            const user = await User.findOne({ userId: interaction.user.id });
+            const hasPending = hasPendingVerification(interaction.user.id) || !!user?.verificationPending;
 
-			const user = await User.findOne({ userId: interaction.user.id });
+            // Bypass cooldown if verification is pending
+            if (!hasPending && now - last < cooldownMs) {
+                const remainingMs = cooldownMs - (now - last);
+                const mins = Math.ceil(remainingMs / 60000);
+                return interaction.reply({ content: `Please wait ${mins} minute(s) before checking again.`, ephemeral: true });
+            }
+
+            statusCooldown.set(interaction.user.id, now);
+            await interaction.deferReply({ ephemeral: true });
+
+            // If user has a pending verification, try to confirm once immediately
+            try {
+                if (hasPending) {
+                    await triggerVerifyNow(interaction.user.id, interaction.client);
+                }
+            } catch {}
+
 			if (user && user.walletAddress) {
 				try { await checkUserNfts(user, interaction.guild, { bypassCache: true }); } catch {}
 			}
@@ -117,7 +129,7 @@ module.exports = {
 				c3Line = hasPass ? `<@&1402656276441469050> assigned` : `<@&1402656276441469050> not assigned/removed.`;
 			}
 
-			const lines = [
+            const lines = [
 				`Wallet: ${status.hasWallet ? status.walletAddress : 'Not linked'}`,
 				'',
 				`Collection 1: ${status.c1} NFTs (${NFT_COLLECTION1_DAILY_REWARD} $CASH/day)`,
@@ -127,6 +139,21 @@ module.exports = {
 				'',
 				`Verification status: ${verifiedText}`
 			];
+
+            // If verification is pending, add progress info inline (no DMs)
+            if (hasPending) {
+                let remaining = '';
+                if (user?.verificationTimestamp) {
+                    const deadline = new Date(user.verificationTimestamp).getTime() + (5 * 60 * 1000);
+                    const remMs = Math.max(0, deadline - Date.now());
+                    const remMin = Math.ceil(remMs / 60000);
+                    remaining = ` (~${remMin} min left)`;
+                }
+                lines.push('', `Verification in progress${remaining}. We auto-check every 15s.`);
+                if (user?.verificationAmount && user?.walletAddress) {
+                    lines.push(`Send EXACTLY ${user.verificationAmount.toFixed ? user.verificationAmount.toFixed(6) : user.verificationAmount} MON from ${user.walletAddress} to ${VERIFICATION_WALLET}.`);
+                }
+            }
 
 			await interaction.editReply(lines.join('\n'));
 		} catch (e) {
