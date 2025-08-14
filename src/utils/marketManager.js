@@ -157,9 +157,19 @@ async function buyMarketItem(itemId, userId, username, guild) {
         await purchase.save();
 
         // Update sold spots count
-        if (item.spots > 0) {
-            await MarketItem.findByIdAndUpdate(item._id, { $inc: { soldSpots: 1 } });
-        }
+		if (item.spots > 0) {
+			await MarketItem.findByIdAndUpdate(item._id, { $inc: { soldSpots: 1 } });
+
+			// Update the marketplace message to reflect new spots left
+			try {
+				const marketMessage = await getMarketMessage();
+				if (marketMessage && marketMessage.channelId && marketMessage.messageId) {
+					await updateMarketMessage(marketMessage.channelId, marketMessage.messageId, guild.client);
+				}
+			} catch (updateError) {
+				console.error('Error updating marketplace message after purchase:', updateError);
+			}
+		}
 
         // Schedule role removal if temporary
         if (item.durationHours > 0) {
