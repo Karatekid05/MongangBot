@@ -170,7 +170,7 @@ function hasPendingVerification(userId) {
 
 async function getUserNftStatus(userId) {
 	const user = await User.findOne({ userId });
-	if (!user || !user.walletAddress) return { hasWallet: false };
+	if (!user || !user.walletAddress) return { hasWallet: false, c1: 0, c2: 0 };
 	return {
 		hasWallet: true,
 		walletAddress: user.walletAddress,

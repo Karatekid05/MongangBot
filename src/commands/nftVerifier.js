@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { startWalletVerification, getUserNftStatus, VERIFICATION_WALLET, triggerVerifyNow, hasPendingVerification } = require('../utils/walletVerification');
-const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD, COLLECTION3_NAME, COLLECTION3_CONTRACT_ADDRESS } = require('../utils/constants');
+const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD, COLLECTION3_NAME, COLLECTION3_CONTRACT_ADDRESS, COLLECTION3_ROLE_ID } = require('../utils/constants');
 const User = require('../models/User');
 const { checkUserNfts, getNftsForCollection, hasCollection3Pass } = require('../utils/monadNftChecker');
 const Setting = require('../models/Setting');
@@ -122,11 +122,15 @@ module.exports = {
 			const status = await getUserNftStatus(interaction.user.id);
 			const verifiedText = user?.walletVerified ? 'Verified' : 'Not verified';
 
-			let c3Line = `<@&1402656276441469050> not live yet`;
-			if (COLLECTION3_CONTRACT_ADDRESS && user?.walletAddress) {
+			let c3Line;
+			if (!COLLECTION3_CONTRACT_ADDRESS) {
+				c3Line = `<@&${COLLECTION3_ROLE_ID}> not live yet`;
+			} else if (!user?.walletAddress) {
+				c3Line = `Link your wallet to check eligibility for <@&${COLLECTION3_ROLE_ID}>`;
+			} else {
 				let hasPass = false;
 				try { hasPass = await hasCollection3Pass(user.walletAddress, { bypassCache: true }); } catch {}
-				c3Line = hasPass ? `<@&1402656276441469050> assigned` : `<@&1402656276441469050> not assigned/removed.`;
+				c3Line = hasPass ? `<@&${COLLECTION3_ROLE_ID}> assigned` : `<@&${COLLECTION3_ROLE_ID}> not assigned/removed.`;
 			}
 
             const lines = [
