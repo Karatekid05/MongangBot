@@ -191,15 +191,30 @@ async function checkUserNfts(user, guild, options = {}) {
         // Collection 3: role assignment based on static contract
         const collection3Address = COLLECTION3_CONTRACT_ADDRESS;
         if (collection3Address) {
-            const hasPass = await hasCollection3Pass(user.walletAddress, options);
+            let hasRoleExisting = false;
+            let member = null;
             if (guild) {
                 try {
-                    const member = await guild.members.fetch(user.userId);
-                    const hasRole = member.roles.cache.has(COLLECTION3_ROLE_ID);
-                    if (hasPass && !hasRole) {
+                    member = await guild.members.fetch(user.userId);
+                    hasRoleExisting = member.roles.cache.has(COLLECTION3_ROLE_ID);
+                } catch (e) {
+                    // If we can't fetch the member, skip role toggling entirely
+                    console.warn('Failed to fetch guild member for role toggle:', e.message);
+                }
+            }
+
+            const hasPass = await hasCollection3Pass(
+                user.walletAddress,
+                { ...options, existingHasRole: hasRoleExisting }
+            );
+
+            if (member) {
+                try {
+                    const hasRoleAfterFetch = member.roles.cache.has(COLLECTION3_ROLE_ID);
+                    if (hasPass && !hasRoleAfterFetch) {
                         await member.roles.add(COLLECTION3_ROLE_ID);
                         console.log(`Assigned ${COLLECTION3_NAME} role to ${user.username}`);
-                    } else if (!hasPass && hasRole) {
+                    } else if (!hasPass && hasRoleAfterFetch) {
                         await member.roles.remove(COLLECTION3_ROLE_ID);
                         console.log(`Removed ${COLLECTION3_NAME} role from ${user.username}`);
                     }
@@ -421,12 +436,18 @@ async function hasCollection3Pass(address, options = {}) {
     if (cached !== null) return cached;
   }
 
-  // Try ERC721 balanceOf aggregator
+  const keepRoleIfUnknown = Boolean(options.existingHasRole);
+  let anySuccessful = false;
+
+  // Try ERC721 balanceOf aggregator (with retry)
   try {
     const formattedAddr = addr.slice(2).toLowerCase().padStart(64, '0');
     const data = `${ERC721_BALANCE_OF_ABI_HASH}000000000000000000000000${formattedAddr}`;
-    const resp = await rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] });
+    const resp = await callWithRetry(async () =>
+      rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] })
+    );
     if (resp.data && resp.data.result) {
+      anySuccessful = true;
       const count = parseInt(resp.data.result, 16) || 0;
       if (count > 0) { nftCache.set(cacheKey, true); return true; }
     }
@@ -438,7 +459,12 @@ async function hasCollection3Pass(address, options = {}) {
       const tokenIdHex = tokenId.toString(16).padStart(64, '0');
       const data = `${ERC721_OWNER_OF}${tokenIdHex}`;
       try {
-        const resp = await rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] });
+        const resp = await callWithRetry(async () =>
+          rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] })
+        );
+        if (resp.data && resp.data.result) {
+          anySuccessful = true;
+        }
         if (resp.data && resp.data.result && resp.data.result !== '0x') {
           // owner address is last 40 hex chars
           const ownerHex = '0x' + resp.data.result.slice(-40);
@@ -459,14 +485,23 @@ async function hasCollection3Pass(address, options = {}) {
     for (let probeId = 0; probeId <= 32; probeId++) {
       const tokenIdHex = probeId.toString(16).padStart(64, '0');
       const data = `${ERC1155_BALANCE_OF_ABI_HASH}${formattedAddr64}${tokenIdHex}`;
-      const resp = await rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] });
+      const resp = await callWithRetry(async () =>
+        rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] })
+      );
       if (resp.data && resp.data.result) {
+        anySuccessful = true;
         const count = parseInt(resp.data.result, 16) || 0;
         if (count > 0) { nftCache.set(cacheKey, true); return true; }
       }
     }
   } catch {}
 
+  // If we never had a successful RPC response, keep current role state to avoid flapping
+  if (!anySuccessful) {
+    return keepRoleIfUnknown;
+  }
+
+  // Definitive negative (we had successful responses but found no ownership)
   nftCache.set(cacheKey, false);
   return false;
 }

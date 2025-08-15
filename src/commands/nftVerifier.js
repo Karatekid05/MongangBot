@@ -116,7 +116,7 @@ module.exports = {
             } catch {}
 
 			if (user && user.walletAddress) {
-				try { await checkUserNfts(user, interaction.guild, { bypassCache: true }); } catch {}
+				try { await checkUserNfts(user, interaction.guild, {}); } catch {}
 			}
 
 			const status = await getUserNftStatus(interaction.user.id);
@@ -129,7 +129,7 @@ module.exports = {
 				c3Line = `Link your wallet to check eligibility for <@&${COLLECTION3_ROLE_ID}>`;
 			} else {
 				let hasPass = false;
-				try { hasPass = await hasCollection3Pass(user.walletAddress, { bypassCache: true }); } catch {}
+				try { hasPass = await hasCollection3Pass(user.walletAddress, {}); } catch {}
 				c3Line = hasPass ? `<@&${COLLECTION3_ROLE_ID}> assigned` : `<@&${COLLECTION3_ROLE_ID}> not assigned/removed.`;
 			}
 

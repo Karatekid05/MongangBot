@@ -24,36 +24,46 @@ A Discord bot for tracking gang activity and managing points in a server with 4 
 
 1. Clone this repository
 2. Install dependencies: `npm install`
-3. Copy `.env.example` to `.env` and fill in your credentials
+3. Copy `.env.example` to `.env` and fill in your credentials (see template below)
 4. Create a Google Sheets spreadsheet and set the spreadsheet ID in the `.env` file
 5. Update the Monad NFT contract addresses in the `.env` file
 6. Start the bot: `npm start`
 
 ## Environment Variables
 
-Fill the following variables in your `.env` file:
+Copy this template to your `.env` and fill in the values:
 
 ```
-# Discord Bot Token
-DISCORD_TOKEN=your_discord_bot_token
-DISCORD_CLIENT_ID=your_discord_client_id
+# Discord
+DISCORD_TOKEN=
+DISCORD_CLIENT_ID=
+DISCORD_GUILD_ID=
+# Optional: multiple moderator role IDs separated by comma
+MOD_ROLE_IDS=
 
-# MongoDB Connection String
-MONGODB_URI=your_mongodb_connection_string
+# MongoDB
+MONGODB_URI=
 
 # Google Sheets API
-GOOGLE_SHEETS_CLIENT_EMAIL=your_service_account_email
-GOOGLE_SHEETS_PRIVATE_KEY=your_service_account_private_key
-GOOGLE_SHEETS_SPREADSHEET_ID=your_spreadsheet_id
+GOOGLE_SHEETS_CLIENT_EMAIL=
+# If your private key has newlines, use \n
+GOOGLE_SHEETS_PRIVATE_KEY=
+GOOGLE_SHEETS_SPREADSHEET_ID=
 
-# Discord Server Information
-DISCORD_GUILD_ID=your_discord_server_id
-MOD_ROLE_ID=your_moderator_role_id
+# Monad / NFTs
+# Use a private RPC endpoint (e.g. Alchemy/QuickNode) – Monad Testnet
+MONAD_RPC_URL=
+NFT_COLLECTION1_ADDRESS=
+NFT_COLLECTION2_ADDRESS=
+# Wallet that receives the micro-transfer for verification
+VERIFICATION_WALLET=
 
-# Monad NFT Integration
-MONAD_API_URL=https://api-testnet.monad.xyz
-NFT_COLLECTION1_ADDRESS=0x1234567890123456789012345678901234567890
-NFT_COLLECTION2_ADDRESS=0x0987654321098765432109876543210987654321
+# RPC limits (tune to your plan/CPU)
+NFT_RPC_CONCURRENCY=8
+NFT_RPC_RPS_LIMIT=30
+
+# Environment
+NODE_ENV=production
 ```
 
 ## Commands
