@@ -14,6 +14,23 @@ async function getStatusCooldownMs() {
 	return s ? Number(s.value) : DEFAULT_STATUS_COOLDOWN_MS;
 }
 
+// Safely respond to an interaction without crashing on expired/invalid webhooks
+async function safeRespond(interaction, payload) {
+	try {
+		if (interaction.deferred || interaction.replied) {
+			await interaction.editReply(payload);
+		} else {
+			await interaction.reply({ ...payload, ephemeral: true });
+		}
+	} catch (err) {
+		try {
+			await interaction.followUp({ ...payload, ephemeral: true });
+		} catch (err2) {
+			console.error('Failed to send interaction response:', err2.message);
+		}
+	}
+}
+
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('nftverifier')
@@ -84,7 +101,7 @@ module.exports = {
 			const address = interaction.fields.getTextInputValue('wallet_address');
 			await startWalletVerification(interaction, client, address);
 		} catch (e) {
-			await interaction.editReply({ content: 'Error starting verification.', ephemeral: true });
+			await safeRespond(interaction, { content: 'Error starting verification.', ephemeral: true });
 		}
 	},
 
@@ -159,9 +176,9 @@ module.exports = {
                 }
             }
 
-			await interaction.editReply(lines.join('\n'));
+			await safeRespond(interaction, { content: lines.join('\n'), ephemeral: true });
 		} catch (e) {
-			await interaction.editReply({ content: 'Error checking status.', ephemeral: true });
+			await safeRespond(interaction, { content: 'Error checking status.', ephemeral: true });
 		}
 	}
 };

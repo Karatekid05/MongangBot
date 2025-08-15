@@ -18,6 +18,11 @@ const IFACE_ERC1155 = '0xd9b67a26';
 const RPC_CONCURRENCY = Number(process.env.NFT_RPC_CONCURRENCY || 5);
 const RPC_RPS_LIMIT = Number(process.env.NFT_RPC_RPS_LIMIT || 20); // keep well under 25/sec
 
+// Batching controls to smooth account-level throughput on provider
+const CHECK_BATCH_SIZE = Number(process.env.NFT_CHECK_BATCH_SIZE || 50);
+const CHECK_BATCH_DELAY_MS = Number(process.env.NFT_CHECK_BATCH_DELAY_MS || 1500);
+const CHECK_PARALLEL = Number(process.env.NFT_CHECK_PARALLEL || 4);
+
 let rpcActive = 0;
 const rpcQueue = [];
 
@@ -78,6 +83,24 @@ function rpcCall(payload) {
   });
 }
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function pMapWithConcurrency(items, mapper, concurrency) {
+    const results = new Array(items.length);
+    let nextIndex = 0;
+    const workers = new Array(Math.max(1, concurrency)).fill(null).map(async () => {
+        while (true) {
+            const current = nextIndex++;
+            if (current >= items.length) break;
+            results[current] = await mapper(items[current], current);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+}
+
 // Cache to store results of recent checks
 const nftCache = {
     data: {},
@@ -128,30 +151,40 @@ async function checkAllUsersNfts(userId = null) {
             details: []
         };
 
-        // Check NFTs for each user
-        for (const user of users) {
-            try {
-                console.log(`Checking NFTs for ${user.username} (${user.walletAddress})`);
-                await checkUserNfts(user);
-                results.success++;
-                results.details.push({
-                    userId: user.userId,
-                    username: user.username,
-                    status: 'success',
-                    nfts: {
-                        collection1: user.nfts.collection1Count,
-                        collection2: user.nfts.collection2Count
-                    }
-                });
-            } catch (error) {
-                console.error(`Error checking NFTs for ${user.username}:`, error.message);
-                results.failed++;
-                results.details.push({
-                    userId: user.userId,
-                    username: user.username,
-                    status: 'failed',
-                    error: error.message
-                });
+        // Process in batches to smooth provider throughput
+        for (let start = 0; start < users.length; start += CHECK_BATCH_SIZE) {
+            const batch = users.slice(start, start + CHECK_BATCH_SIZE);
+            console.log(`Processing NFT checks batch ${Math.floor(start / CHECK_BATCH_SIZE) + 1} (${batch.length} users)`);
+
+            await pMapWithConcurrency(batch, async (user) => {
+                try {
+                    console.log(`Checking NFTs for ${user.username} (${user.walletAddress})`);
+                    await checkUserNfts(user);
+                    results.success++;
+                    results.details.push({
+                        userId: user.userId,
+                        username: user.username,
+                        status: 'success',
+                        nfts: {
+                            collection1: user.nfts.collection1Count,
+                            collection2: user.nfts.collection2Count
+                        }
+                    });
+                } catch (error) {
+                    console.error(`Error checking NFTs for ${user.username}:`, error.message);
+                    results.failed++;
+                    results.details.push({
+                        userId: user.userId,
+                        username: user.username,
+                        status: 'failed',
+                        error: error.message
+                    });
+                }
+            }, CHECK_PARALLEL);
+
+            // Pause between batches to avoid CU/s spikes
+            if (start + CHECK_BATCH_SIZE < users.length) {
+                await sleep(CHECK_BATCH_DELAY_MS);
             }
         }
 
