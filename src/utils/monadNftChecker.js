@@ -23,6 +23,11 @@ const CHECK_BATCH_SIZE = Number(process.env.NFT_CHECK_BATCH_SIZE || 50);
 const CHECK_BATCH_DELAY_MS = Number(process.env.NFT_CHECK_BATCH_DELAY_MS || 1500);
 const CHECK_PARALLEL = Number(process.env.NFT_CHECK_PARALLEL || 4);
 
+// TTLs to reduce repeated checks (tunable via env)
+const C12_TTL_MS = Number(process.env.NFT_C12_TTL_MS || 24 * 60 * 60 * 1000); // 24h
+const C3_TTL_MS = Number(process.env.NFT_C3_TTL_MS || 24 * 60 * 60 * 1000);   // 24h
+const C3_DEEP_TTL_MS = Number(process.env.NFT_C3_DEEP_TTL_MS || 24 * 60 * 60 * 1000); // 24h
+
 let rpcActive = 0;
 const rpcQueue = [];
 
@@ -104,7 +109,7 @@ async function pMapWithConcurrency(items, mapper, concurrency) {
 // Cache to store results of recent checks
 const nftCache = {
     data: {},
-    timeout: 15 * 60 * 1000, // 15 minutes in ms (was 60 minutes)
+    timeout: 60 * 60 * 1000, // 60 minutes in ms
     get: function (key) {
         const entry = this.data[key];
         if (!entry) return null;
@@ -204,9 +209,17 @@ async function checkAllUsersNfts(userId = null) {
  */
 async function checkUserNfts(user, guild, options = {}) {
     try {
-        // Check NFTs for each collection
-        const collection1Count = await getNftsForCollection(user.walletAddress, process.env.NFT_COLLECTION1_ADDRESS, 0, options);
-        const collection2Count = await getNftsForCollection(user.walletAddress, process.env.NFT_COLLECTION2_ADDRESS, 0, options);
+        const now = Date.now();
+
+        // Check NFTs for each collection (1/2) with TTL gating
+        let collection1Count = user.nfts.collection1Count || 0;
+        let collection2Count = user.nfts.collection2Count || 0;
+
+        const shouldRefreshC12 = !user.nftsLastCheckedAt || (now - new Date(user.nftsLastCheckedAt).getTime() > C12_TTL_MS) || options.forceRefresh;
+        if (shouldRefreshC12) {
+            collection1Count = await getNftsForCollection(user.walletAddress, process.env.NFT_COLLECTION1_ADDRESS, 0, options);
+            collection2Count = await getNftsForCollection(user.walletAddress, process.env.NFT_COLLECTION2_ADDRESS, 0, options);
+        }
 
         console.log(`NFTs found for ${user.username}: Collection 1: ${collection1Count}, Collection 2: ${collection2Count}`);
 
@@ -214,9 +227,10 @@ async function checkUserNfts(user, guild, options = {}) {
         const changed12 =
             user.nfts.collection1Count !== collection1Count ||
             user.nfts.collection2Count !== collection2Count;
-        if (changed12) {
+        if (changed12 || shouldRefreshC12) {
             user.nfts.collection1Count = collection1Count;
             user.nfts.collection2Count = collection2Count;
+            user.nftsLastCheckedAt = new Date(now);
             await user.save();
             console.log(`NFTs updated for ${user.username}`);
         }
@@ -236,10 +250,25 @@ async function checkUserNfts(user, guild, options = {}) {
                 }
             }
 
-            const hasPass = await hasCollection3Pass(
-                user.walletAddress,
-                { ...options, existingHasRole: hasRoleExisting }
-            );
+            // TTL gating for collection 3
+            let hasPass = hasRoleExisting;
+            const c3Fresh = user.c3LastCheckedAt && (now - new Date(user.c3LastCheckedAt).getTime() <= C3_TTL_MS);
+            if (!c3Fresh || options.forceRefresh) {
+                const deepFresh = user.c3LastDeepScanAt && (now - new Date(user.c3LastDeepScanAt).getTime() <= C3_DEEP_TTL_MS);
+                const allowDeepScan = options.allowDeepScan !== false && !deepFresh;
+
+                hasPass = await hasCollection3Pass(
+                    user.walletAddress,
+                    { ...options, existingHasRole: hasRoleExisting, allowDeepScan }
+                );
+
+                // Update timestamps
+                user.c3LastCheckedAt = new Date(now);
+                if (allowDeepScan) {
+                    user.c3LastDeepScanAt = new Date(now);
+                }
+                await user.save().catch(() => {});
+            }
 
             if (member) {
                 try {
@@ -486,48 +515,52 @@ async function hasCollection3Pass(address, options = {}) {
     }
   } catch {}
 
-  // Deep scan via ownerOf over tokenIds 0..777 (early exit)
-  try {
-    for (let tokenId = 0; tokenId <= 777; tokenId++) {
-      const tokenIdHex = tokenId.toString(16).padStart(64, '0');
-      const data = `${ERC721_OWNER_OF}${tokenIdHex}`;
-      try {
+  // Optionally perform deep/expensive scans only if allowed
+  const allowDeepScan = options.allowDeepScan !== false;
+  if (allowDeepScan) {
+    // Deep scan via ownerOf over tokenIds 0..777 (early exit)
+    try {
+      for (let tokenId = 0; tokenId <= 777; tokenId++) {
+        const tokenIdHex = tokenId.toString(16).padStart(64, '0');
+        const data = `${ERC721_OWNER_OF}${tokenIdHex}`;
+        try {
+          const resp = await callWithRetry(async () =>
+            rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] })
+          );
+          if (resp.data && resp.data.result) {
+            anySuccessful = true;
+          }
+          if (resp.data && resp.data.result && resp.data.result !== '0x') {
+            // owner address is last 40 hex chars
+            const ownerHex = '0x' + resp.data.result.slice(-40);
+            if (ownerHex.toLowerCase() === addr.toLowerCase()) {
+              nftCache.set(cacheKey, true);
+              return true;
+            }
+          }
+        } catch {
+          // ignore and continue
+        }
+      }
+    } catch {}
+
+    // ERC1155 multi-id as last attempt
+    try {
+      const formattedAddr64 = addr.slice(2).toLowerCase().padStart(64, '0');
+      for (let probeId = 0; probeId <= 32; probeId++) {
+        const tokenIdHex = probeId.toString(16).padStart(64, '0');
+        const data = `${ERC1155_BALANCE_OF_ABI_HASH}${formattedAddr64}${tokenIdHex}`;
         const resp = await callWithRetry(async () =>
           rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] })
         );
         if (resp.data && resp.data.result) {
           anySuccessful = true;
+          const count = parseInt(resp.data.result, 16) || 0;
+          if (count > 0) { nftCache.set(cacheKey, true); return true; }
         }
-        if (resp.data && resp.data.result && resp.data.result !== '0x') {
-          // owner address is last 40 hex chars
-          const ownerHex = '0x' + resp.data.result.slice(-40);
-          if (ownerHex.toLowerCase() === addr.toLowerCase()) {
-            nftCache.set(cacheKey, true);
-            return true;
-          }
-        }
-      } catch {
-        // ignore and continue
       }
-    }
-  } catch {}
-
-  // ERC1155 multi-id as last attempt
-  try {
-    const formattedAddr64 = addr.slice(2).toLowerCase().padStart(64, '0');
-    for (let probeId = 0; probeId <= 32; probeId++) {
-      const tokenIdHex = probeId.toString(16).padStart(64, '0');
-      const data = `${ERC1155_BALANCE_OF_ABI_HASH}${formattedAddr64}${tokenIdHex}`;
-      const resp = await callWithRetry(async () =>
-        rpcCall({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [ { to: COLLECTION3_CONTRACT_ADDRESS, data }, 'latest' ] })
-      );
-      if (resp.data && resp.data.result) {
-        anySuccessful = true;
-        const count = parseInt(resp.data.result, 16) || 0;
-        if (count > 0) { nftCache.set(cacheKey, true); return true; }
-      }
-    }
-  } catch {}
+    } catch {}
+  }
 
   // If we never had a successful RPC response, keep current role state to avoid flapping
   if (!anySuccessful) {
@@ -554,6 +587,10 @@ async function checkTransactionVerification(fromAddress, toAddress, exactAmount)
         fromAddress = fromAddress.toLowerCase();
         toAddress = toAddress.toLowerCase();
 
+        // Compute expected amount in micro-MON (6 decimals) to avoid float errors
+        const expectedMicro = Math.round(Number(exactAmount) * 1e6);
+        const WEI_PER_MICRO = 10n ** 12n; // 1e12 wei = 1 micro-MON
+
         // Get latest block
         const response = await rpcCall({
             jsonrpc: '2.0',
@@ -567,59 +604,43 @@ async function checkTransactionVerification(fromAddress, toAddress, exactAmount)
         }
 
         const latestBlock = parseInt(response.data.result, 16);
-        const fromBlock = Math.max(0, latestBlock - 100); // Check last 100 blocks
+        const lookback = Number(process.env.VERIFICATION_BLOCK_LOOKBACK || 300);
+        const startBlock = Math.max(0, latestBlock - lookback);
 
-        console.log(`Checking transactions from blocks ${fromBlock} to ${latestBlock}`);
+        console.log(`Checking transactions from blocks ${startBlock} to ${latestBlock}`);
 
-        // In production, you would use a more robust API like Monad Explorer or
-        // an indexing service to search for all transactions to the destination address
-        // Here we use a simulation for tests
+        for (let blockNum = latestBlock; blockNum >= startBlock; blockNum--) {
+            const blockTag = '0x' + blockNum.toString(16);
+            try {
+                const blockRes = await rpcCall({
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'eth_getBlockByNumber',
+                    params: [blockTag, true]
+                });
+                const block = blockRes.data && blockRes.data.result;
+                if (!block || !Array.isArray(block.transactions)) continue;
 
-        // Simulation for development environment
-        if (process.env.NODE_ENV === 'development') {
-            // 80% chance of success for easier tests
-            const randomSuccess = Math.random() < 0.8;
-            const mockTxHash = "0x" + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join("");
+                for (const tx of block.transactions) {
+                    if (!tx || !tx.to) continue;
+                    if (tx.to.toLowerCase() !== toAddress) continue;
+                    if ((tx.from || '').toLowerCase() !== fromAddress) continue;
+                    if (!tx.value) continue;
 
-            console.log(`[SIMULATION] Result: ${randomSuccess ? "Transaction found" : "Transaction not found"}`);
-
-            return {
-                success: randomSuccess,
-                txHash: randomSuccess ? mockTxHash : null
-            };
-        }
-
-        // In production environment, you would implement something like:
-        /*
-        // Get recent transactions for the destination address using a Monad API
-        const transactions = await getRecentTransactionsForAddress(toAddress, fromBlock, latestBlock);
-        
-        // Search for a transaction that matches the criteria
-        for (const tx of transactions) {
-            // Verify if it's from the correct sender and has the exact amount
-            if (
-                tx.from.toLowerCase() === fromAddress &&
-                tx.to.toLowerCase() === toAddress &&
-                Math.abs(parseFloat(ethers.utils.formatEther(tx.value)) - exactAmount) < 0.0000001
-            ) {
-                console.log(`Valid transaction found: ${tx.hash}`);
-                return { success: true, txHash: tx.hash };
+                    // Compare by micro-MON units
+                    const wei = BigInt(tx.value);
+                    const micro = Number(wei / WEI_PER_MICRO);
+                    if (micro === expectedMicro) {
+                        console.log(`Valid transaction found in block ${blockNum}: ${tx.hash}`);
+                        return { success: true, txHash: tx.hash };
+                    }
+                }
+            } catch (e) {
+                // continue scanning on transient errors
             }
         }
-        */
 
-        // Since we don't have direct access to the complete Monad API now, we return simulated success
-        // This should be replaced with actual implementation in production
-        const simulatedSuccess = Math.random() < 0.5;
-        const simulatedTxHash = simulatedSuccess ?
-            "0x" + [...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join("") :
-            null;
-
-        return {
-            success: simulatedSuccess,
-            txHash: simulatedTxHash
-        };
-
+        return { success: false, txHash: null };
     } catch (error) {
         console.error('Error checking transaction:', error);
         return { success: false, txHash: null };

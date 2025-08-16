@@ -64,6 +64,19 @@ const userSchema = new mongoose.Schema({
             default: 0
         }
     },
+    // NFT check timestamps (used to reduce RPC calls)
+    nftsLastCheckedAt: {
+        type: Date,
+        default: null
+    },
+    c3LastCheckedAt: {
+        type: Date,
+        default: null
+    },
+    c3LastDeepScanAt: {
+        type: Date,
+        default: null
+    },
     // Track total points awarded by source
     pointsBySource: {
         games: {
