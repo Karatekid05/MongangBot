@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const User = require('../models/User');
 const Gang = require('../models/Gang');
-const { NFT_COLLECTION1_DAILY_REWARD, NFT_COLLECTION2_DAILY_REWARD } = require('../utils/constants');
+const { MATRICA_CASH_50_ROLE_ID, MATRICA_CASH_150_ROLE_ID, COLLECTION3_ROLE_ID } = require('../utils/constants');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -55,10 +55,13 @@ module.exports = {
                 }
             }
 
-            // Calculate fixed daily NFT rewards
-            const collection1Reward = userData.nfts?.collection1Count > 0 ? NFT_COLLECTION1_DAILY_REWARD : 0;
-            const collection2Reward = userData.nfts?.collection2Count > 0 ? NFT_COLLECTION2_DAILY_REWARD : 0;
-            const dailyNftRewards = collection1Reward + collection2Reward;
+            // Role-based nightly rewards (Matrica)
+            let member = null;
+            try { member = await interaction.guild.members.fetch(targetUser.id); } catch {}
+            const has50 = member ? member.roles.cache.has(MATRICA_CASH_50_ROLE_ID) : false;
+            const has150 = member ? member.roles.cache.has(MATRICA_CASH_150_ROLE_ID) : false;
+            const hasPass = member ? member.roles.cache.has(COLLECTION3_ROLE_ID) : false;
+            const nightlyRewards = (has50 ? 50 : 0) + (has150 ? 150 : 0);
 
             // Create embed with user information
             const embed = new EmbedBuilder()
@@ -76,10 +79,14 @@ module.exports = {
             // Espaço entre seções
             embed.addFields({ name: '\u200B', value: '\u200B', inline: false });
 
-            // NFT section - Mais focado nas recompensas diárias
+            // Verification & roles section (Matrica)
             embed.addFields({
-                name: '🖼️ NFT Holdings',
-                value: `🖼️ **Collection 1:** ${userData.nfts.collection1Count} NFTs ${userData.nfts.collection1Count > 0 ? `(${NFT_COLLECTION1_DAILY_REWARD} $CASH/day)` : "(0 $CASH/day)"}\n🖼️ **Collection 2:** ${userData.nfts.collection2Count} NFTs ${userData.nfts.collection2Count > 0 ? `(${NFT_COLLECTION2_DAILY_REWARD} $CASH/day)` : "(0 $CASH/day)"}\n💰 **Daily NFT Rewards:** ${dailyNftRewards} $CASH`,
+                name: '🖼️ Verification & Roles (Matrica)',
+                value: `• <@&${MATRICA_CASH_50_ROLE_ID}>: ${has50 ? 'Yes' : 'No'} (50 $CASH nightly)\n` +
+                       `• <@&${MATRICA_CASH_150_ROLE_ID}>: ${has150 ? 'Yes' : 'No'} (150 $CASH nightly)\n` +
+                       `• <@&${COLLECTION3_ROLE_ID}>: ${hasPass ? 'Yes' : 'No'} (no cash)\n` +
+                       `\n💰 **Total Nightly Rewards:** ${nightlyRewards} $CASH` +
+                       `\n\nNote: On-chain NFT verification is disabled. Holdings shown previously are no longer updated.`,
                 inline: false
             });
 
