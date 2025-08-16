@@ -604,15 +604,13 @@ async function checkTransactionVerification(fromAddress, toAddress, exactAmount)
         }
 
         const latestBlock = parseInt(response.data.result, 16);
-        let lookback = Number(process.env.VERIFICATION_BLOCK_LOOKBACK || 5000);
-        const maxLookback = Number(process.env.VERIFICATION_MAX_LOOKBACK || 20000);
+        const lookback = Number(process.env.VERIFICATION_BLOCK_LOOKBACK || 5000);
+        const scanCap = Number(process.env.VERIFICATION_SCAN_BLOCKS_PER_ATTEMPT || 800);
+        const range = Math.min(lookback, scanCap);
+        const startBlock = Math.max(0, latestBlock - range);
+        console.log(`Checking transactions from blocks ${startBlock} to ${latestBlock}`);
 
-        while (true) {
-            const startBlock = Math.max(0, latestBlock - lookback);
-            console.log(`Checking transactions from blocks ${startBlock} to ${latestBlock}`);
-
-            let found = false;
-            for (let blockNum = latestBlock; blockNum >= startBlock; blockNum--) {
+        for (let blockNum = latestBlock; blockNum >= startBlock; blockNum--) {
                 const blockTag = '0x' + blockNum.toString(16);
                 try {
                     const blockRes = await rpcCall({
@@ -641,12 +639,6 @@ async function checkTransactionVerification(fromAddress, toAddress, exactAmount)
                 } catch (e) {
                     // continue scanning on transient errors
                 }
-            }
-
-            if (found) break;
-            if (lookback >= maxLookback) break;
-            lookback = Math.min(maxLookback, lookback * 2);
-            console.log(`Not found, expanding lookback to ${lookback} blocks...`);
         }
 
         return { success: false, txHash: null };

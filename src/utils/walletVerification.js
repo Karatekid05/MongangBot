@@ -78,7 +78,8 @@ async function startWalletVerification(interaction, client, walletAddressRaw) {
 		timeoutId: null
 	};
 
-	// Poll every 15s until success or timeout
+	const POLL_INTERVAL_MS = Number(process.env.VERIFICATION_POLL_INTERVAL_MS || 15000);
+	// Poll until success or timeout
 	pending.intervalId = setInterval(async () => {
 		try {
 			const ok = await attemptVerifyTransaction(interaction.user.id, client);
@@ -88,7 +89,7 @@ async function startWalletVerification(interaction, client, walletAddressRaw) {
 				pendingVerifications.delete(interaction.user.id);
 			}
 		} catch {}
-	}, 15 * 1000);
+	}, POLL_INTERVAL_MS);
 
 	// Hard timeout handler (no DMs – user will use Check Status button)
 	pending.timeoutId = setTimeout(async () => {
