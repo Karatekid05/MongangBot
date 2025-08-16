@@ -133,7 +133,10 @@ module.exports = {
             } catch {}
 
 			if (user && user.walletAddress) {
-				try { await checkUserNfts(user, interaction.guild, {}); } catch {}
+				try {
+					// Fast refresh for c1/c2; avoid expensive deep scan for c3 here
+					await checkUserNfts(user, interaction.guild, { forceRefresh: true, allowDeepScan: false });
+				} catch {}
 			}
 
 			const status = await getUserNftStatus(interaction.user.id);

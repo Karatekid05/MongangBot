@@ -604,40 +604,49 @@ async function checkTransactionVerification(fromAddress, toAddress, exactAmount)
         }
 
         const latestBlock = parseInt(response.data.result, 16);
-        const lookback = Number(process.env.VERIFICATION_BLOCK_LOOKBACK || 300);
-        const startBlock = Math.max(0, latestBlock - lookback);
+        let lookback = Number(process.env.VERIFICATION_BLOCK_LOOKBACK || 5000);
+        const maxLookback = Number(process.env.VERIFICATION_MAX_LOOKBACK || 20000);
 
-        console.log(`Checking transactions from blocks ${startBlock} to ${latestBlock}`);
+        while (true) {
+            const startBlock = Math.max(0, latestBlock - lookback);
+            console.log(`Checking transactions from blocks ${startBlock} to ${latestBlock}`);
 
-        for (let blockNum = latestBlock; blockNum >= startBlock; blockNum--) {
-            const blockTag = '0x' + blockNum.toString(16);
-            try {
-                const blockRes = await rpcCall({
-                    jsonrpc: '2.0',
-                    id: 1,
-                    method: 'eth_getBlockByNumber',
-                    params: [blockTag, true]
-                });
-                const block = blockRes.data && blockRes.data.result;
-                if (!block || !Array.isArray(block.transactions)) continue;
+            let found = false;
+            for (let blockNum = latestBlock; blockNum >= startBlock; blockNum--) {
+                const blockTag = '0x' + blockNum.toString(16);
+                try {
+                    const blockRes = await rpcCall({
+                        jsonrpc: '2.0',
+                        id: 1,
+                        method: 'eth_getBlockByNumber',
+                        params: [blockTag, true]
+                    });
+                    const block = blockRes.data && blockRes.data.result;
+                    if (!block || !Array.isArray(block.transactions)) continue;
 
-                for (const tx of block.transactions) {
-                    if (!tx || !tx.to) continue;
-                    if (tx.to.toLowerCase() !== toAddress) continue;
-                    if ((tx.from || '').toLowerCase() !== fromAddress) continue;
-                    if (!tx.value) continue;
+                    for (const tx of block.transactions) {
+                        if (!tx || !tx.to) continue;
+                        if (tx.to.toLowerCase() !== toAddress) continue;
+                        if ((tx.from || '').toLowerCase() !== fromAddress) continue;
+                        if (!tx.value) continue;
 
-                    // Compare by micro-MON units
-                    const wei = BigInt(tx.value);
-                    const micro = Number(wei / WEI_PER_MICRO);
-                    if (micro === expectedMicro) {
-                        console.log(`Valid transaction found in block ${blockNum}: ${tx.hash}`);
-                        return { success: true, txHash: tx.hash };
+                        // Compare by micro-MON units
+                        const wei = BigInt(tx.value);
+                        const micro = Number(wei / WEI_PER_MICRO);
+                        if (micro === expectedMicro) {
+                            console.log(`Valid transaction found in block ${blockNum}: ${tx.hash}`);
+                            return { success: true, txHash: tx.hash };
+                        }
                     }
+                } catch (e) {
+                    // continue scanning on transient errors
                 }
-            } catch (e) {
-                // continue scanning on transient errors
             }
+
+            if (found) break;
+            if (lookback >= maxLookback) break;
+            lookback = Math.min(maxLookback, lookback * 2);
+            console.log(`Not found, expanding lookback to ${lookback} blocks...`);
         }
 
         return { success: false, txHash: null };
