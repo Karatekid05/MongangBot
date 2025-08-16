@@ -20,14 +20,9 @@ module.exports = {
 
 			await interaction.deferReply({ ephemeral: true });
 
-			// Optionally disable DMs for this manual run
-			if (interaction.options.getBoolean('notify') === false) {
-				// Monkey-patch send to no-op for this run
-				const originalSend = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(interaction.client.users.cache.first() || {}), 'send');
-				// If we cannot patch, we rely on existing best-effort try/catch in dailyNftRewards
-			}
 
-			await dailyNftRewards(client);
+			const notify = interaction.options.getBoolean('notify') ?? false; // default: no DMs
+			await dailyNftRewards(client, { notify });
 
 			await interaction.editReply('✅ Daily NFT rewards executed. Check logs for details.');
 		} catch (error) {

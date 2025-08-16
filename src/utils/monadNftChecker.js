@@ -277,8 +277,13 @@ async function checkUserNfts(user, guild, options = {}) {
                         await member.roles.add(COLLECTION3_ROLE_ID);
                         console.log(`Assigned ${COLLECTION3_NAME} role to ${user.username}`);
                     } else if (!hasPass && hasRoleAfterFetch) {
-                        await member.roles.remove(COLLECTION3_ROLE_ID);
-                        console.log(`Removed ${COLLECTION3_NAME} role from ${user.username}`);
+                        // Only remove when deep scans are allowed (we want high confidence)
+                        if (options.allowDeepScan !== false) {
+                            await member.roles.remove(COLLECTION3_ROLE_ID);
+                            console.log(`Removed ${COLLECTION3_NAME} role from ${user.username}`);
+                        } else {
+                            console.log(`Skip removal of ${COLLECTION3_NAME} for ${user.username} (conservative mode, allowDeepScan=false)`);
+                        }
                     }
                 } catch (e) {
                     console.warn('Failed role toggle for collection 3:', e.message);
@@ -567,7 +572,13 @@ async function hasCollection3Pass(address, options = {}) {
     return keepRoleIfUnknown;
   }
 
-  // Definitive negative (we had successful responses but found no ownership)
+  // If we reached here with successful responses but no ownership detected
+  // and we already have the role while deep scans are disabled, keep role conservatively
+  if (options.allowDeepScan === false && keepRoleIfUnknown) {
+    return true;
+  }
+
+  // Definitive negative (we had successful responses and no ownership)
   nftCache.set(cacheKey, false);
   return false;
 }

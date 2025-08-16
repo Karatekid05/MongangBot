@@ -10,8 +10,10 @@ const FOUNDER_ROLE_ID = '1339293248308641883'; // Apenas Founders não recebem r
 /**
  * Calculates and distributes daily rewards for NFT holders
  * @param {Object} client - Discord client
+ * @param {Object} [options]
+ * @param {boolean} [options.notify=true] - If false, do not DM users
  */
-async function dailyNftRewards(client) {
+async function dailyNftRewards(client, options = {}) {
   try {
     console.log('Starting daily NFT rewards distribution...');
     console.log(`Using reward values: Collection 1: ${NFT_COLLECTION1_DAILY_REWARD}, Collection 2: ${NFT_COLLECTION2_DAILY_REWARD}`);
@@ -33,6 +35,7 @@ async function dailyNftRewards(client) {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
 
     const guild = client.guilds.cache.first();
+    const notifyUsers = options.notify !== false;
 
     for (const user of users) {
       try {
@@ -109,16 +112,18 @@ async function dailyNftRewards(client) {
           // Update gang totals
           await updateGangTotals(user.gangId);
 
-          // Send reward notification
-          try {
-            const member = guild ? await guild.members.fetch(user.userId) : null;
-            if (member) {
-              const rewardMessage = `🎉 Daily NFT Rewards\n\n${rewardBreakdown.join('\n')}\nTotal: ${totalReward} $CASH\n\nRewards are distributed daily at 11 PM UTC`;
-              await member.send(rewardMessage);
-              console.log(`Reward notification sent to ${user.username}`);
+          // Optional reward notification (disabled when options.notify === false)
+          if (notifyUsers) {
+            try {
+              const member = guild ? await guild.members.fetch(user.userId) : null;
+              if (member) {
+                const rewardMessage = `🎉 Daily NFT Rewards\n\n${rewardBreakdown.join('\n')}\nTotal: ${totalReward} $CASH\n\nRewards are distributed daily at 11 PM UTC`;
+                await member.send(rewardMessage);
+                console.log(`Reward notification sent to ${user.username}`);
+              }
+            } catch (dmError) {
+              console.log(`Could not DM user ${user.username}: ${dmError.message}`);
             }
-          } catch (dmError) {
-            console.log(`Could not DM user ${user.username}: ${dmError.message}`);
           }
 
           console.log(`Rewarded ${user.username} with ${totalReward} $CASH (${rewardBreakdown.join(', ')})`);
