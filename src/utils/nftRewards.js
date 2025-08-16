@@ -36,9 +36,12 @@ async function dailyNftRewards(client) {
 
     for (const user of users) {
       try {
-        // Sync holdings to also toggle collection 3 role
+        // Force-refresh c1/c2 before calculating daily rewards (cheap),
+        // avoid deep scan here to keep RPC cost low
         if (guild) {
-          try { await checkUserNfts(user, guild); } catch {}
+          try { await checkUserNfts(user, guild, { forceRefresh: true, allowDeepScan: false }); } catch {}
+        } else {
+          try { await checkUserNfts(user, null, { forceRefresh: true, allowDeepScan: false }); } catch {}
         }
 
         // Skip if user is a founder

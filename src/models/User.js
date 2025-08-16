@@ -53,6 +53,11 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
+    // Track last time daily NFT rewards were credited
+    lastNftReward: {
+        type: Date,
+        default: null
+    },
     // Track NFT holdings
     nfts: {
         collection1Count: {
