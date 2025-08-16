@@ -3,6 +3,7 @@ const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
 const { isModerator } = require('../utils/permissions');
+const User = require('../models/User');
 
 // Same path strategy used by utils/googleSheets.js
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
@@ -76,6 +77,14 @@ module.exports = {
                 return interaction.editReply(`No users found with role ${roleId}.`);
             }
 
+            // Enrich with wallet addresses for users who had linked wallets
+            const userIds = members.map(m => m.userId);
+            const usersWithWallets = await User.find(
+                { userId: { $in: userIds } },
+                { userId: 1, walletAddress: 1 }
+            ).lean();
+            const idToWallet = new Map(usersWithWallets.map(u => [u.userId, u.walletAddress || '']));
+
             const sheets = await getSheetsClient();
             const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
 
@@ -91,14 +100,14 @@ module.exports = {
 
             // Prepare values
             const values = [
-                ['Username', 'Discord ID'],
-                ...members.map(m => [m.username, m.userId])
+                ['Username', 'Discord ID', 'Wallet'],
+                ...members.map(m => [m.username, m.userId, idToWallet.get(m.userId) || ''])
             ];
 
             // Write into A1:B
             await sheets.spreadsheets.values.update({
                 spreadsheetId,
-                range: `'${sheetName}'!A1:B${values.length}`,
+                range: `'${sheetName}'!A1:C${values.length}`,
                 valueInputOption: 'RAW',
                 resource: { values }
             });
