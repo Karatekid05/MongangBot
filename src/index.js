@@ -7,12 +7,12 @@ const cron = require('node-cron');
 
 const { loadCommands } = require('./handlers/commandHandler');
 const { handleMessagePoints, resetWeeklyStats, updateGangTotals } = require('./utils/pointsManager');
-const { dailyNftRewards } = require('./utils/nftRewards');
-const { dailySpecialRoleRewards } = require('./utils/dailyRoleRewards');
+// const { dailyNftRewards } = require('./utils/nftRewards'); // Disabled: NFT verification via wallet no longer used
+const { dailySpecialRoleRewards, nightlyMatricaRoleRewards } = require('./utils/dailyRoleRewards');
 const { initializeGangs } = require('./utils/initializeGangs');
 const { initializeUsers } = require('./utils/initializeUsers');
 const { exportLeaderboards } = require('./utils/googleSheets');
-const { checkAllUsersNfts } = require('./utils/monadNftChecker');
+// const { checkAllUsersNfts } = require('./utils/monadNftChecker'); // Disabled: no more RPC NFT sync
 const { GANGS, MAD_GANG_ROLE_ID, getUserGangWithPriority, getUserGangRoles } = require('./utils/constants');
 const { isModerator } = require('./utils/permissions');
 const User = require('./models/User');
@@ -80,12 +80,11 @@ client.once('ready', async () => {
     // Initialize users based on roles after the bot is ready
     await initializeUsers(client);
 
-    // Sync NFTs and distribute rewards once a day at 11 PM UTC
+    // Nightly role-based rewards via Matrica roles at 11 PM UTC
     cron.schedule('0 23 * * *', async () => {
-        console.log('Starting daily NFT synchronization and rewards distribution at 11 PM UTC...');
-        await checkAllUsersNfts();
-        await dailyNftRewards(client);
-        console.log('NFT synchronization and rewards completed');
+        console.log('Starting nightly Matrica role-based rewards at 11 PM UTC...');
+        await nightlyMatricaRoleRewards(client);
+        console.log('Matrica role-based rewards completed');
     });
 
     // Distribute 500 $CASH daily to members with special role at 11:10 PM UTC
@@ -322,12 +321,14 @@ client.on('interactionCreate', async interaction => {
             handleBuyMarketButton(interaction);
         } else if (customId === 'market_buy_item') {
             handleMarketBuyItemButton(interaction);
-        } else if (customId === 'nft_verify_wallet') {
-            const verifier = require('./commands/nftVerifier');
-            await verifier.handleVerifyButton(interaction, client);
-        } else if (customId === 'nft_check_status') {
-            const verifier = require('./commands/nftVerifier');
-            await verifier.handleCheckStatus(interaction);
+        } else if (customId === 'nft_verify_wallet' || customId === 'nft_check_status') {
+            try {
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.reply({ content: 'NFT verification via wallet is disabled. Access is now granted via Matrica roles.', ephemeral: true });
+                } else {
+                    await interaction.followUp({ content: 'NFT verification via wallet is disabled. Access is now granted via Matrica roles.', ephemeral: true });
+                }
+            } catch {}
         }
     } else if (interaction.isStringSelectMenu()) {
         // Handle select menu interactions
@@ -338,8 +339,7 @@ client.on('interactionCreate', async interaction => {
         }
     } else if (interaction.isModalSubmit()) {
         if (interaction.customId === 'nft_wallet_modal') {
-            const verifier = require('./commands/nftVerifier');
-            await verifier.handleWalletModal(interaction, client);
+            await interaction.reply({ content: 'NFT verification via wallet is disabled. Access is now granted via Matrica roles.', ephemeral: true });
         }
     } else if (interaction.isAutocomplete()) {
         const command = client.commands.get(interaction.commandName);
@@ -375,12 +375,11 @@ async function handleUserHelpButton(interaction) {
                 value: `Send messages in your gang's channel, newbies chat, or general chat to earn 10 $CASH per message. There's a ${cooldownSeconds}-second cooldown between rewarded messages.`
             },
             {
-                name: '🖼️ NFT Rewards',
-                value: `If you own NFTs, you'll earn fixed daily rewards automatically:\n` +
-                    `• Collection 1: ${NFT_COLLECTION1_DAILY_REWARD} $CASH daily (any quantity of NFTs)\n` +
-                    `• Collection 2: ${NFT_COLLECTION2_DAILY_REWARD} $CASH daily (any quantity of NFTs)\n` +
-                    `Maximum daily reward is ${NFT_COLLECTION1_DAILY_REWARD + NFT_COLLECTION2_DAILY_REWARD} $CASH\n` +
-                    `Rewards are sent at 11 PM UTC`
+                name: '🖼️ Verification & Rewards',
+                value: `Verification is handled by Matrica roles. Nightly rewards at 11 PM UTC:\n` +
+                    `• <@&1406329826461352120>: 50 $CASH\n` +
+                    `• <@&1406330019936211164>: 150 $CASH\n` +
+                    `• <@&1402656276441469050>: Pass role (no cash)`
             },
             {
                 name: '🎫 Ticket System',
@@ -398,7 +397,7 @@ async function handleUserHelpButton(interaction) {
             },
             {
                 name: '👛 Register Your Wallet',
-                value: 'Use `/registerwallet address:0x...` to connect your wallet and receive NFT rewards'
+                value: 'Wallet linking is disabled. Access is granted via Matrica roles.'
             },
             {
                 name: '📋 Check Your Profile',
@@ -483,11 +482,8 @@ async function handleModeratorHelpButton(interaction) {
                     'Reset weekly stats and export data. This happens automatically on Sundays at midnight, but can be triggered manually.'
             },
             {
-                name: '🖼️ NFT Management',
-                value: '`/updatenft user:@user collection1:2 collection2:5`\n' +
-                    'Manually update a user\'s NFT holdings if needed. Note that users now receive fixed rewards regardless of the quantity of NFTs they hold.\n\n' +
-                    '`/syncnfts user:@user`\n' +
-                    'Sync NFT holdings from the blockchain for all users or a specific user. This happens automatically daily at 11 PM UTC.'
+                name: '🖼️ Verification & Rewards',
+                value: 'NFT wallet verification and blockchain sync are disabled. Use Matrica roles. You can run `run-nightly-matrica` to trigger rewards manually.'
             },
             {
                 name: '⚙️ Configuration',

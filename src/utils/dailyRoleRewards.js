@@ -1,5 +1,6 @@
 const { awardCash, updateGangTotals } = require('./pointsManager');
 const User = require('../models/User');
+const { getUserGangWithPriority, GANGS } = require('./constants');
 
 /**
  * Distribui cash diariamente para todos os membros que possuem um role específico
@@ -41,7 +42,7 @@ async function distributeDailyRoleRewards(client, roleId, amount, source = 'othe
                 for (const [memberId, member] of membersWithRole) {
                     try {
                         // Verificar se o usuário existe no banco de dados
-                        const user = await User.findOne({ userId: memberId });
+                        let user = await User.findOne({ userId: memberId });
 
                         if (user) {
                             // Usuário existe no banco, distribuir cash
@@ -55,7 +56,42 @@ async function distributeDailyRoleRewards(client, roleId, amount, source = 'othe
                                 console.error(`❌ Failed to award cash to ${member.user.username} (${memberId})`);
                             }
                         } else {
-                            console.log(`⏭️ User ${member.user.username} (${memberId}) not found in database - skipping`);
+                            // Tentar criar o utilizador: usar gang do Discord, senão escolher aleatoriamente
+                            let gang = getUserGangWithPriority(member);
+                            if (!gang) {
+                                // Escolher uma gang aleatória quando o membro ainda não tem gang
+                                const idx = Math.floor(Math.random() * GANGS.length);
+                                gang = GANGS[idx];
+                                console.log(`No gang role found for ${member.user.username}. Assigning random gang: ${gang.name}`);
+                            }
+                            if (gang) {
+                                try {
+                                    user = new User({
+                                        userId: memberId,
+                                        username: member.user.username,
+                                        gangId: gang.roleId,
+                                        cash: 0,
+                                        weeklyCash: 0,
+                                        lastMessageReward: new Date(0)
+                                    });
+                                    await user.save();
+                                    // Atribuir o cargo da gang no Discord
+                                    try {
+                                        await member.roles.add(gang.roleId);
+                                        console.log(`Assigned gang role ${gang.roleId} (${gang.name}) to ${member.user.username}`);
+                                    } catch (roleErr) {
+                                        console.error(`Failed to assign gang role ${gang.roleId} to ${member.user.username}:`, roleErr);
+                                    }
+                                    const success = await awardCash(memberId, source, amount);
+                                    if (success) {
+                                        totalRewardsDistributed += amount;
+                                        totalMembersRewarded++;
+                                        console.log(`🆕 Created user and awarded ${amount} $CASH to ${member.user.username} (${memberId})`);
+                                    }
+                                } catch (createErr) {
+                                    console.error(`Failed to create user for ${member.user.username}:`, createErr);
+                                }
+                            }
                         }
                     } catch (error) {
                         console.error(`Error processing member ${member.user.username}:`, error);
@@ -92,7 +128,28 @@ async function dailySpecialRoleRewards(client) {
     await distributeDailyRoleRewards(client, SPECIAL_ROLE_ID, REWARD_AMOUNT, SOURCE_CATEGORY);
 }
 
+/**
+ * Nightly Matrica role-based rewards
+ * - 1406329826461352120 → 50 $CASH
+ * - 1406330019936211164 → 150 $CASH
+ * - 1402656276441469050 → 0 $CASH (presence only)
+ */
+async function nightlyMatricaRoleRewards(client) {
+    try {
+        const { MATRICA_CASH_50_ROLE_ID, MATRICA_CASH_150_ROLE_ID } = require('./constants');
+        console.log('🌙 Starting nightly Matrica role-based rewards...');
+
+        await distributeDailyRoleRewards(client, MATRICA_CASH_50_ROLE_ID, 50, 'nftRewards');
+        await distributeDailyRoleRewards(client, MATRICA_CASH_150_ROLE_ID, 150, 'nftRewards');
+
+        console.log('🌙 Nightly Matrica role-based rewards completed');
+    } catch (error) {
+        console.error('Error running nightly Matrica role rewards:', error);
+    }
+}
+
 module.exports = {
     distributeDailyRoleRewards,
-    dailySpecialRoleRewards
+    dailySpecialRoleRewards,
+    nightlyMatricaRoleRewards
 }; 

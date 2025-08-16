@@ -11,6 +11,10 @@ const COLLECTION3_NAME = 'HaHa x MonGang Pass';
 const COLLECTION3_ROLE_ID = '1402656276441469050';
 const COLLECTION3_CONTRACT_ADDRESS = '0xfe5b5af24280af7ea190a41d0240fe30c46f1c40';
 
+// Matrica verification roles (role-based rewards)
+const MATRICA_CASH_50_ROLE_ID = '1406329826461352120';
+const MATRICA_CASH_150_ROLE_ID = '1406330019936211164';
+
 // Gang data
 const GANGS = [
     {
@@ -106,6 +110,8 @@ module.exports = {
     COLLECTION3_NAME,
     COLLECTION3_ROLE_ID,
     COLLECTION3_CONTRACT_ADDRESS,
+    MATRICA_CASH_50_ROLE_ID,
+    MATRICA_CASH_150_ROLE_ID,
     getUserGangWithPriority,
     getUserGangRoles
 }; 

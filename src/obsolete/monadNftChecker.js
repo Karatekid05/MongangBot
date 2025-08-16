@@ -4,6 +4,7 @@ const Setting = require('../models/Setting');
 const { COLLECTION3_ROLE_ID, COLLECTION3_NAME, COLLECTION3_CONTRACT_ADDRESS } = require('./constants');
 
 // Monad Testnet RPC Endpoint
+// Deprecated component: RPC interactions are disabled. Keeping defaults for compatibility, but not scheduled.
 const MONAD_RPC_URL = process.env.MONAD_RPC_URL || 'https://testnet-rpc.monad.xyz/';
 
 // ABI for ERC-1155 balanceOf function (simplified for use with JSON-RPC)
