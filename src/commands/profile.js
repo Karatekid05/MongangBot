@@ -81,10 +81,9 @@ module.exports = {
             // Verification & roles section (Matrica)
             embed.addFields({
                 name: '🖼️ Verification & Roles (Matrica)',
-                value: `• <@&${MATRICA_CASH_50_ROLE_ID}>: ${has50 ? 'Yes' : 'No'} (no cash)\n` +
-                       `• <@&${MATRICA_CASH_150_ROLE_ID}>: ${has150 ? 'Yes' : 'No'} (no cash)\n` +
-                       `• <@&${COLLECTION3_ROLE_ID}>: ${hasPass ? 'Yes' : 'No'} (no cash)\n` +
-                       `\nℹ️ Role-based rewards are currently disabled.`,
+                value: `• <@&${MATRICA_CASH_50_ROLE_ID}>: ${has50 ? 'Yes' : 'No'}\n` +
+                       `• <@&${MATRICA_CASH_150_ROLE_ID}>: ${has150 ? 'Yes' : 'No'}\n` +
+                       `• <@&${COLLECTION3_ROLE_ID}>: ${hasPass ? 'Yes' : 'No'}\n`,
                 inline: false
             });
 
