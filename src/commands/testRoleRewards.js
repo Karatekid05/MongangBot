@@ -40,6 +40,8 @@ module.exports = {
                 });
             }
 
+            // Role-based rewards are disabled
+            return interaction.reply({ content: 'Role-based rewards are disabled.', ephemeral: true });
             const roleId = interaction.options.getString('roleid');
             const amount = interaction.options.getInteger('amount');
             const source = interaction.options.getString('source') || 'others';

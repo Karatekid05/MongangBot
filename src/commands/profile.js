@@ -61,7 +61,6 @@ module.exports = {
             const has50 = member ? member.roles.cache.has(MATRICA_CASH_50_ROLE_ID) : false;
             const has150 = member ? member.roles.cache.has(MATRICA_CASH_150_ROLE_ID) : false;
             const hasPass = member ? member.roles.cache.has(COLLECTION3_ROLE_ID) : false;
-            const dailyRewards = (has50 ? 50 : 0) + (has150 ? 150 : 0);
 
             // Create embed with user information
             const embed = new EmbedBuilder()
@@ -82,10 +81,10 @@ module.exports = {
             // Verification & roles section (Matrica)
             embed.addFields({
                 name: '🖼️ Verification & Roles (Matrica)',
-                value: `• <@&${MATRICA_CASH_50_ROLE_ID}>: ${has50 ? 'Yes' : 'No'} (50 $CASH daily)\n` +
-                       `• <@&${MATRICA_CASH_150_ROLE_ID}>: ${has150 ? 'Yes' : 'No'} (150 $CASH daily)\n` +
+                value: `• <@&${MATRICA_CASH_50_ROLE_ID}>: ${has50 ? 'Yes' : 'No'} (no cash)\n` +
+                       `• <@&${MATRICA_CASH_150_ROLE_ID}>: ${has150 ? 'Yes' : 'No'} (no cash)\n` +
                        `• <@&${COLLECTION3_ROLE_ID}>: ${hasPass ? 'Yes' : 'No'} (no cash)\n` +
-                       `\n💰 **Total Daily Rewards:** ${dailyRewards} $CASH`,
+                       `\nℹ️ Role-based rewards are currently disabled.`,
                 inline: false
             });
 

@@ -80,19 +80,19 @@ client.once('ready', async () => {
     // Initialize users based on roles after the bot is ready
     await initializeUsers(client);
 
-    // Nightly role-based rewards via Matrica roles at 11 PM UTC
-    cron.schedule('0 23 * * *', async () => {
-        console.log('Starting nightly Matrica role-based rewards at 11 PM UTC...');
-        await nightlyMatricaRoleRewards(client);
-        console.log('Matrica role-based rewards completed');
-    });
+    // Nightly role-based rewards disabled
+    // cron.schedule('0 23 * * *', async () => {
+    //     console.log('Starting nightly Matrica role-based rewards at 11 PM UTC...');
+    //     await nightlyMatricaRoleRewards(client);
+    //     console.log('Matrica role-based rewards completed');
+    // });
 
-    // Distribute 500 $CASH daily to members with special role at 11:10 PM UTC
-    cron.schedule('10 23 * * *', async () => {
-        console.log('Starting daily special role rewards distribution at 11:10 PM UTC...');
-        await dailySpecialRoleRewards(client);
-        console.log('Daily special role rewards completed');
-    });
+    // Daily special role rewards disabled
+    // cron.schedule('10 23 * * *', async () => {
+    //     console.log('Starting daily special role rewards distribution at 11:10 PM UTC...');
+    //     await dailySpecialRoleRewards(client);
+    //     console.log('Daily special role rewards completed');
+    // });
 
     // Schedule weekly snapshot, export and reset on Mondays at 3 AM UTC
     cron.schedule('0 3 * * 1', async () => {
@@ -376,9 +376,9 @@ async function handleUserHelpButton(interaction) {
             },
             {
                 name: '🖼️ Verification & Rewards',
-                value: `Verification is handled by Matrica roles. Nightly rewards at 11 PM UTC:\n` +
-                    `• <@&1406329826461352120>: 50 $CASH\n` +
-                    `• <@&1406330019936211164>: 150 $CASH\n` +
+                value: `Verification is handled by Matrica roles. Role-based rewards are disabled:\n` +
+                    `• <@&1406329826461352120>: no cash\n` +
+                    `• <@&1406330019936211164>: no cash\n` +
                     `• <@&1402656276441469050>: Pass role (no cash)`
             },
             {
@@ -483,7 +483,7 @@ async function handleModeratorHelpButton(interaction) {
             },
             {
                 name: '🖼️ Verification & Rewards',
-                value: 'NFT wallet verification and blockchain sync are disabled. Use Matrica roles. You can run `run-nightly-matrica` to trigger rewards manually.'
+                value: 'NFT wallet verification and blockchain sync are disabled. Use Matrica roles. Role-based rewards are currently disabled.'
             },
             {
                 name: '⚙️ Configuration',

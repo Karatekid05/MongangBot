@@ -11,7 +11,8 @@ const { getUserGangWithPriority, GANGS } = require('./constants');
  */
 async function distributeDailyRoleRewards(client, roleId, amount, source = 'others') {
     try {
-        console.log(`Starting daily role rewards distribution for role ${roleId}...`);
+        console.log('Role-based rewards are disabled; skipping role rewards distribution.');
+        return;
 
         // Verificar se o cliente Discord está disponível
         if (!client || !client.guilds) {
@@ -124,8 +125,8 @@ async function dailySpecialRoleRewards(client) {
     const REWARD_AMOUNT = 500;
     const SOURCE_CATEGORY = 'others';
 
-    console.log('🎁 Starting daily special role rewards distribution...');
-    await distributeDailyRoleRewards(client, SPECIAL_ROLE_ID, REWARD_AMOUNT, SOURCE_CATEGORY);
+    console.log('Role-based rewards are disabled; skipping daily special role rewards.');
+    return;
 }
 
 /**
@@ -136,13 +137,8 @@ async function dailySpecialRoleRewards(client) {
  */
 async function nightlyMatricaRoleRewards(client) {
     try {
-        const { MATRICA_CASH_50_ROLE_ID, MATRICA_CASH_150_ROLE_ID } = require('./constants');
-        console.log('🌙 Starting nightly Matrica role-based rewards...');
-
-        await distributeDailyRoleRewards(client, MATRICA_CASH_50_ROLE_ID, 50, 'nftRewards');
-        await distributeDailyRoleRewards(client, MATRICA_CASH_150_ROLE_ID, 150, 'nftRewards');
-
-        console.log('🌙 Nightly Matrica role-based rewards completed');
+        console.log('Role-based rewards are disabled; skipping nightly Matrica role rewards.');
+        return;
     } catch (error) {
         console.error('Error running nightly Matrica role rewards:', error);
     }
