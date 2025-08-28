@@ -74,57 +74,79 @@ module.exports = {
             });
         }
 
-        // Defer reply to handle potentially slow database operations
-        await interaction.deferReply();
+        // Defer reply to handle potentially slow database operations (ephemeral to avoid channel noise)
+        await interaction.deferReply({ ephemeral: true });
 
         // Ensure guild members are cached for username lookups
         try { await interaction.guild.members.fetch(); } catch {}
 
         const results = [];
 
+        function normalize(str) {
+            return (str || '').trim().toLowerCase();
+        }
+
+        function namesToTry(name) {
+            const n = name.trim();
+            const variants = new Set([n, n.replace(/\.$/, '')]); // try without trailing dot
+            return Array.from(variants);
+        }
+
+        function findMemberByName(name, guild) {
+            const tries = namesToTry(name).map(normalize);
+            return guild.members.cache.find(m => {
+                const u = m.user;
+                const candidates = [
+                    normalize(u?.username),
+                    normalize(u?.globalName),
+                    normalize(m.displayName),
+                    normalize(u?.tag)
+                ];
+                return tries.some(t => candidates.includes(t));
+            });
+        }
+
         for (const name of parsedNames) {
             try {
-                // Try to find user by username (case-insensitive)
-                const userDoc = await User.findOne({ username: { $regex: new RegExp('^' + escapeRegex(name) + '$', 'i') } });
+                // Prefer resolving by guild member first (handles renamed users)
+                let memberMatch = findMemberByName(name, interaction.guild);
+                let effectiveUser = null;
 
-                let effectiveUser = userDoc;
-                let createdUser = false;
-
-                if (!effectiveUser) {
-                    // Try to find a guild member by username match
-                    const memberMatch = interaction.guild.members.cache.find(m => m.user && m.user.username && m.user.username.toLowerCase() === name.toLowerCase());
-
-                    if (!memberMatch) {
+                if (memberMatch) {
+                    // Try DB by userId
+                    effectiveUser = await User.findOne({ userId: memberMatch.id });
+                    if (!effectiveUser) {
+                        const userGang = getUserGangWithPriority(memberMatch);
+                        if (!userGang) {
+                            results.push(`${memberMatch.user.username} does not belong to any gang. Assign a gang role to this user first.`);
+                            continue;
+                        }
+                        try {
+                            const newUser = new User({
+                                userId: memberMatch.id,
+                                username: memberMatch.user.username,
+                                gangId: userGang.roleId,
+                                cash: 0,
+                                weeklyCash: 0,
+                                lastMessageReward: new Date(0)
+                            });
+                            await newUser.save();
+                            effectiveUser = newUser;
+                            console.log(`New user registered via /award-bulk: ${memberMatch.user.username} in gang ${userGang.name}`);
+                        } catch (error) {
+                            console.error(`Error creating user ${memberMatch.user.username}:`, error);
+                            results.push(`Error registering ${memberMatch.user.username}. Please try again.`);
+                            continue;
+                        }
+                    }
+                } else {
+                    // Fallback: try DB by username (case-insensitive)
+                    const userDoc = await User.findOne({ username: { $regex: new RegExp('^' + escapeRegex(name) + '$', 'i') } });
+                    if (!userDoc) {
                         results.push(`❌ Could not find member ${name} in the server.`);
                         continue;
                     }
-
-                    // Try to determine gang and create the user like /award
-                    const userGang = getUserGangWithPriority(memberMatch);
-                    if (!userGang) {
-                        results.push(`${memberMatch.user.username} does not belong to any gang. Assign a gang role to this user first.`);
-                        continue;
-                    }
-
-                    try {
-                        const newUser = new User({
-                            userId: memberMatch.id,
-                            username: memberMatch.user.username,
-                            gangId: userGang.roleId,
-                            cash: 0,
-                            weeklyCash: 0,
-                            lastMessageReward: new Date(0)
-                        });
-
-                        await newUser.save();
-                        effectiveUser = newUser;
-                        createdUser = true;
-                        console.log(`New user registered via /award-bulk: ${memberMatch.user.username} in gang ${userGang.name}`);
-                    } catch (error) {
-                        console.error(`Error creating user ${memberMatch.user.username}:`, error);
-                        results.push(`Error registering ${memberMatch.user.username}. Please try again.`);
-                        continue;
-                    }
+                    effectiveUser = userDoc;
                 }
 
                 // Award the cash
@@ -146,9 +168,24 @@ module.exports = {
         const failCount = results.length - successCount;
 
         const header = `Completed bulk award. Success: ${successCount}, Failures: ${failCount}`;
-        const body = results.join('\n');
+        const lines = results;
 
-        await interaction.editReply(`${header}\n\n${body}`);
+        // Send header first
+        await interaction.editReply(header);
+
+        // Then send results in chunks to avoid Discord content limit
+        const MAX = 1800;
+        let chunk = '';
+        for (const line of lines) {
+            if ((chunk + line + '\n').length > MAX) {
+                await interaction.followUp({ content: chunk, ephemeral: true });
+                chunk = '';
+            }
+            chunk += line + '\n';
+        }
+        if (chunk.length > 0) {
+            await interaction.followUp({ content: chunk, ephemeral: true });
+        }
     },
 };
 
