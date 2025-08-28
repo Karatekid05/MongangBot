@@ -74,8 +74,8 @@ module.exports = {
             });
         }
 
-        // Defer reply to handle potentially slow database operations (ephemeral to avoid channel noise)
-        await interaction.deferReply({ ephemeral: true });
+        // Defer reply (public) to handle potentially slow database operations
+        await interaction.deferReply();
 
         // Ensure guild members are cached for username lookups
         try { await interaction.guild.members.fetch(); } catch {}
@@ -106,6 +106,9 @@ module.exports = {
             });
         }
 
+        // Inform start
+        await interaction.editReply(`Processing ${parsedNames.length} users for ${amount} $CASH each (source: ${source})...`);
+
         for (const name of parsedNames) {
             try {
                 // Prefer resolving by guild member first (handles renamed users)
@@ -118,7 +121,9 @@ module.exports = {
                     if (!effectiveUser) {
                         const userGang = getUserGangWithPriority(memberMatch);
                         if (!userGang) {
-                            results.push(`${memberMatch.user.username} does not belong to any gang. Assign a gang role to this user first.`);
+                            const line = `${memberMatch.user.username} does not belong to any gang. Assign a gang role to this user first.`;
+                            results.push(line);
+                            await interaction.followUp({ content: line });
                             continue;
                         }
                         try {
@@ -135,7 +140,9 @@ module.exports = {
                             console.log(`New user registered via /award-bulk: ${memberMatch.user.username} in gang ${userGang.name}`);
                         } catch (error) {
                             console.error(`Error creating user ${memberMatch.user.username}:`, error);
-                            results.push(`Error registering ${memberMatch.user.username}. Please try again.`);
+                            const line = `Error registering ${memberMatch.user.username}. Please try again.`;
+                            results.push(line);
+                            await interaction.followUp({ content: line });
                             continue;
                         }
                     }
@@ -143,7 +150,9 @@ module.exports = {
                     // Fallback: try DB by username (case-insensitive)
                     const userDoc = await User.findOne({ username: { $regex: new RegExp('^' + escapeRegex(name) + '$', 'i') } });
                     if (!userDoc) {
-                        results.push(`❌ Could not find member ${name} in the server.`);
+                        const line = `❌ Could not find member ${name} in the server.`;
+                        results.push(line);
+                        await interaction.followUp({ content: line });
                         continue;
                     }
                     effectiveUser = userDoc;
@@ -153,13 +162,19 @@ module.exports = {
                 const success = await awardCash(effectiveUser.userId, source, amount);
 
                 if (success) {
-                    results.push(`✅ Successfully awarded ${amount} $CASH to ${effectiveUser.username} from source: ${source}`);
+                    const line = `✅ Successfully awarded ${amount} $CASH to ${effectiveUser.username} from source: ${source}`;
+                    results.push(line);
+                    await interaction.followUp({ content: line });
                 } else {
-                    results.push('Failed to award $CASH. Please contact a developer to check the logs.');
+                    const line = 'Failed to award $CASH. Please contact a developer to check the logs.';
+                    results.push(line);
+                    await interaction.followUp({ content: line });
                 }
             } catch (error) {
                 console.error(`Error processing ${name}:`, error);
-                results.push(`❌ Error processing ${name}.`);
+                const line = `❌ Error processing ${name}.`;
+                results.push(line);
+                await interaction.followUp({ content: line });
             }
         }
 
@@ -168,24 +183,7 @@ module.exports = {
         const failCount = results.length - successCount;
 
         const header = `Completed bulk award. Success: ${successCount}, Failures: ${failCount}`;
-        const lines = results;
-
-        // Send header first
         await interaction.editReply(header);
-
-        // Then send results in chunks to avoid Discord content limit
-        const MAX = 1800;
-        let chunk = '';
-        for (const line of lines) {
-            if ((chunk + line + '\n').length > MAX) {
-                await interaction.followUp({ content: chunk, ephemeral: true });
-                chunk = '';
-            }
-            chunk += line + '\n';
-        }
-        if (chunk.length > 0) {
-            await interaction.followUp({ content: chunk, ephemeral: true });
-        }
     },
 };
 
