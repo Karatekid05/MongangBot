@@ -14,7 +14,7 @@ module.exports = {
         .setDescription('Award $CASH to multiple users by username list (Moderator only)')
         .addStringOption(option =>
             option.setName('usernames')
-                .setDescription('Multiline list of usernames (one per line).')
+                .setDescription('List of usernames separated by newline, comma, or space.')
                 .setRequired(true))
         .addStringOption(option =>
             option.setName('source')
@@ -63,7 +63,7 @@ module.exports = {
 
         // Parse usernames list
         const parsedNames = usernamesRaw
-            .split(/\r?\n|,/) // split by linebreaks or commas
+            .split(/[\s,]+/) // split by whitespace or commas
             .map(s => s.trim())
             .filter(s => s.length > 0);
 
