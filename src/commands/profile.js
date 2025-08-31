@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const User = require('../models/User');
 const Gang = require('../models/Gang');
-const { MATRICA_CASH_50_ROLE_ID, MATRICA_CASH_150_ROLE_ID, COLLECTION3_ROLE_ID } = require('../utils/constants');
+const { COLLECTION3_ROLE_ID } = require('../utils/constants');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -55,11 +55,9 @@ module.exports = {
                 }
             }
 
-            // Role-based daily rewards (Matrica)
+            // Matrica roles info: show only Collection 3 (no cash)
             let member = null;
             try { member = await interaction.guild.members.fetch(targetUser.id); } catch {}
-            const has50 = member ? member.roles.cache.has(MATRICA_CASH_50_ROLE_ID) : false;
-            const has150 = member ? member.roles.cache.has(MATRICA_CASH_150_ROLE_ID) : false;
             const hasPass = member ? member.roles.cache.has(COLLECTION3_ROLE_ID) : false;
 
             // Create embed with user information
@@ -78,12 +76,10 @@ module.exports = {
             // Espaço entre seções
             embed.addFields({ name: '\u200B', value: '\u200B', inline: false });
 
-            // Verification & roles section (Matrica)
+            // Verification & roles section (Collection 3 only)
             embed.addFields({
-                name: '🖼️ Verification & Roles (Matrica)',
-                value: `• <@&${MATRICA_CASH_50_ROLE_ID}>: ${has50 ? 'Yes' : 'No'}\n` +
-                       `• <@&${MATRICA_CASH_150_ROLE_ID}>: ${has150 ? 'Yes' : 'No'}\n` +
-                       `• <@&${COLLECTION3_ROLE_ID}>: ${hasPass ? 'Yes' : 'No'}\n`,
+                name: '🖼️ Verification & Roles',
+                value: `• <@&${COLLECTION3_ROLE_ID}>: ${hasPass ? 'Yes' : 'No'}`,
                 inline: false
             });
 
