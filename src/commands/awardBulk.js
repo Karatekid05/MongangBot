@@ -65,6 +65,7 @@ module.exports = {
         const parsedNames = usernamesRaw
             .split(/[\s,]+/) // split by whitespace or commas
             .map(s => s.trim())
+            .map(s => s.replace(/^@+/, '')) // strip leading @ from @username
             .filter(s => s.length > 0);
 
         if (parsedNames.length === 0) {
@@ -85,6 +86,9 @@ module.exports = {
         function normalize(str) {
             return (str || '').trim().toLowerCase();
         }
+        function simplify(str) {
+            return normalize(str).replace(/[^a-z0-9._-]/g, '');
+        }
 
         function namesToTry(name) {
             const n = name.trim();
@@ -94,6 +98,7 @@ module.exports = {
 
         function findMemberByName(name, guild) {
             const tries = namesToTry(name).map(normalize);
+            const triesS = namesToTry(name).map(simplify);
             return guild.members.cache.find(m => {
                 const u = m.user;
                 const candidates = [
@@ -102,7 +107,15 @@ module.exports = {
                     normalize(m.displayName),
                     normalize(u?.tag)
                 ];
-                return tries.some(t => candidates.includes(t));
+                const candidatesS = candidates.map(simplify);
+
+                // exact normalized match
+                if (tries.some(t => candidates.includes(t))) return true;
+                // exact simplified match
+                if (triesS.some(t => candidatesS.includes(t))) return true;
+                // partial match (avoid very short tokens)
+                return tries.some(t => t.length >= 3 && candidates.some(c => c.includes(t)))
+                    || triesS.some(t => t.length >= 3 && candidatesS.some(c => c.includes(t)));
             });
         }
 
