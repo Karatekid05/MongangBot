@@ -65,7 +65,6 @@ module.exports = {
         const parsedNames = usernamesRaw
             .split(/[\s,]+/) // split by whitespace or commas
             .map(s => s.trim())
-            .map(s => s.replace(/^@+/, '')) // strip leading @ from @username
             .filter(s => s.length > 0);
 
         if (parsedNames.length === 0) {
@@ -91,14 +90,23 @@ module.exports = {
         }
 
         function namesToTry(name) {
-            const n = name.trim();
+            const n = name.trim().replace(/^@+/, ''); // remove leading @
+            const mentionMatch = n.match(/^<@!?\d+>$/);
+            if (mentionMatch) return [n];
             const variants = new Set([n, n.replace(/\.$/, '')]); // try without trailing dot
             return Array.from(variants);
         }
 
-        function findMemberByName(name, guild) {
+        async function findMemberByName(name, guild) {
             const tries = namesToTry(name).map(normalize);
             const triesS = namesToTry(name).map(simplify);
+            // If user provided a real mention <@id>, resolve directly
+            const mention = namesToTry(name)[0];
+            const idMatch = mention.match(/^<@!?(\d+)>$/);
+            if (idMatch) {
+                try { return await guild.members.fetch(idMatch[1]); } catch { return null; }
+            }
+
             return guild.members.cache.find(m => {
                 const u = m.user;
                 const candidates = [
@@ -125,7 +133,7 @@ module.exports = {
         for (const name of parsedNames) {
             try {
                 // Prefer resolving by guild member first (handles renamed users)
-                let memberMatch = findMemberByName(name, interaction.guild);
+                let memberMatch = await findMemberByName(name, interaction.guild);
                 let effectiveUser = null;
 
                 if (memberMatch) {
@@ -161,9 +169,10 @@ module.exports = {
                     }
                 } else {
                     // Fallback: try DB by username (case-insensitive)
-                    const userDoc = await User.findOne({ username: { $regex: new RegExp('^' + escapeRegex(name) + '$', 'i') } });
+                    const plain = namesToTry(name)[0].replace(/^@+/, '');
+                    const userDoc = await User.findOne({ username: { $regex: new RegExp('^' + escapeRegex(plain) + '$', 'i') } });
                     if (!userDoc) {
-                        const line = `❌ Could not find member ${name} in the server.`;
+                        const line = `❌ Could not find member ${plain} in the server.`;
                         results.push(line);
                         await interaction.followUp({ content: line });
                         continue;
