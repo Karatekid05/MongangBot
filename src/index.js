@@ -610,7 +610,21 @@ async function handleMarketHelpButton(interaction) {
  */
 async function handleBuyMarketButton(interaction) {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        let acknowledged = false;
+        try {
+            await interaction.deferReply({ ephemeral: true });
+            acknowledged = true;
+        } catch (err) {
+            console.error('Failed to defer buy market interaction:', err);
+            if (err?.code === 10062 || err?.rawError?.code === 10062 || (err?.message || '').includes('Unknown interaction')) {
+                await interaction.channel?.send('⚠️ This button interaction expired. Please click the button again.');
+                return;
+            }
+            try {
+                await interaction.reply({ content: '⚠️ Failed to acknowledge interaction. Please try again.', ephemeral: true });
+                acknowledged = true;
+            } catch {}
+        }
 
         const itemId = interaction.customId.replace('buy_market_', '');
         const userId = interaction.user.id;
@@ -635,21 +649,30 @@ async function handleBuyMarketButton(interaction) {
                 .setFooter({ text: 'Market Purchase' })
                 .setTimestamp();
 
-            await interaction.editReply({
-                content: '✅ Purchase completed successfully!',
-                embeds: [embed]
-            });
+            if (acknowledged) {
+                await interaction.editReply({ content: '✅ Purchase completed successfully!', embeds: [embed] });
+            } else {
+                await interaction.channel?.send('✅ Purchase completed successfully!');
+            }
         } else {
-            await interaction.editReply({
-                content: `❌ ${result.error}`
-            });
+            if (acknowledged) {
+                await interaction.editReply({ content: `❌ ${result.error}` });
+            } else {
+                await interaction.channel?.send(`❌ ${result.error}`);
+            }
         }
 
     } catch (error) {
         console.error('Error buying market item via button:', error);
-        await interaction.editReply({
-            content: `❌ Error processing purchase: ${error.message}`
-        });
+        try {
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply({ content: `❌ Error processing purchase: ${error.message}` });
+            } else {
+                await interaction.reply({ content: `❌ Error processing purchase: ${error.message}`, ephemeral: true });
+            }
+        } catch {
+            await interaction.channel?.send(`❌ Error processing purchase: ${error.message}`);
+        }
     }
 }
 
@@ -659,13 +682,29 @@ async function handleBuyMarketButton(interaction) {
  */
 async function handleMarketBuyItemButton(interaction) {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        let acknowledged = false;
+        try {
+            await interaction.deferReply({ ephemeral: true });
+            acknowledged = true;
+        } catch (err) {
+            console.error('Failed to defer market selector interaction:', err);
+            if (err?.code === 10062 || err?.rawError?.code === 10062 || (err?.message || '').includes('Unknown interaction')) {
+                await interaction.channel?.send('⚠️ This interaction expired. Please press the button again to open the selector.');
+                return;
+            }
+            try {
+                await interaction.reply({ content: '⚠️ Failed to acknowledge interaction. Please try again.', ephemeral: true });
+                acknowledged = true;
+            } catch {}
+        }
 
         const { listMarketItems } = require('./utils/marketManager');
         const marketItems = await listMarketItems();
 
         if (marketItems.length === 0) {
-            return interaction.editReply('❌ No items available in the marketplace.');
+            if (acknowledged) return interaction.editReply('❌ No items available in the marketplace.');
+            await interaction.channel?.send('❌ No items available in the marketplace.');
+            return;
         }
 
         // Create select menu options
@@ -686,16 +725,23 @@ async function handleMarketBuyItemButton(interaction) {
 
         const row = new ActionRowBuilder().addComponents(select);
 
-        await interaction.editReply({
-            content: '🛒 **Select an item to purchase:**',
-            components: [row]
-        });
+        if (acknowledged) {
+            await interaction.editReply({ content: '🛒 **Select an item to purchase:**', components: [row] });
+        } else {
+            await interaction.channel?.send('🛒 **Select an item to purchase:**');
+        }
 
     } catch (error) {
         console.error('Error showing market selector:', error);
-        await interaction.editReply({
-            content: `❌ Error loading marketplace items: ${error.message}`
-        });
+        try {
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply({ content: `❌ Error loading marketplace items: ${error.message}` });
+            } else {
+                await interaction.reply({ content: `❌ Error loading marketplace items: ${error.message}`, ephemeral: true });
+            }
+        } catch {
+            await interaction.channel?.send(`❌ Error loading marketplace items: ${error.message}`);
+        }
     }
 }
 
@@ -706,7 +752,21 @@ async function handleMarketBuyItemButton(interaction) {
 async function handleMarketSelectItem(interaction) {
     try {
         console.log('Market select item interaction received:', interaction.customId);
-        await interaction.deferReply({ ephemeral: true });
+        let acknowledged = false;
+        try {
+            await interaction.deferReply({ ephemeral: true });
+            acknowledged = true;
+        } catch (err) {
+            console.error('Failed to defer market select interaction:', err);
+            if (err?.code === 10062 || err?.rawError?.code === 10062 || (err?.message || '').includes('Unknown interaction')) {
+                await interaction.channel?.send('⚠️ This selection interaction expired. Please run it again.');
+                return;
+            }
+            try {
+                await interaction.reply({ content: '⚠️ Failed to acknowledge interaction. Please try again.', ephemeral: true });
+                acknowledged = true;
+            } catch {}
+        }
 
         const selectedItemId = interaction.values[0];
         const userId = interaction.user.id;
@@ -722,20 +782,30 @@ async function handleMarketSelectItem(interaction) {
         const result = await buyMarketItem(selectedItemId, userId, username, interaction.guild);
 
         if (result.success) {
-            await interaction.editReply({
-                content: `✅ **Purchase successful!**\n\n**Item:** ${result.itemName}\n**Price:** ${result.price} $CASH\n**Duration:** ${result.duration}\n\nYou have been assigned the role!`
-            });
+            if (acknowledged) {
+                await interaction.editReply({ content: `✅ **Purchase successful!**\n\n**Item:** ${result.itemName}\n**Price:** ${result.price} $CASH\n**Duration:** ${result.duration}\n\nYou have been assigned the role!` });
+            } else {
+                await interaction.channel?.send(`✅ Purchase successful! Item: ${result.itemName}`);
+            }
         } else {
-            await interaction.editReply({
-                content: `❌ **Purchase failed:** ${result.error}`
-            });
+            if (acknowledged) {
+                await interaction.editReply({ content: `❌ **Purchase failed:** ${result.error}` });
+            } else {
+                await interaction.channel?.send(`❌ Purchase failed: ${result.error}`);
+            }
         }
 
     } catch (error) {
         console.error('Error processing market selection:', error);
-        await interaction.editReply({
-            content: `❌ Error processing purchase: ${error.message}`
-        });
+        try {
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply({ content: `❌ Error processing purchase: ${error.message}` });
+            } else {
+                await interaction.reply({ content: `❌ Error processing purchase: ${error.message}`, ephemeral: true });
+            }
+        } catch {
+            await interaction.channel?.send(`❌ Error processing purchase: ${error.message}`);
+        }
     }
 }
 
@@ -745,7 +815,21 @@ async function handleMarketSelectItem(interaction) {
  */
 async function handleBuyTicketButton(interaction) {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        let acknowledged = false;
+        try {
+            await interaction.deferReply({ ephemeral: true });
+            acknowledged = true;
+        } catch (err) {
+            console.error('Failed to defer buy ticket interaction:', err);
+            if (err?.code === 10062 || err?.rawError?.code === 10062 || (err?.message || '').includes('Unknown interaction')) {
+                await interaction.channel?.send('⚠️ This button interaction expired. Please click the button again.');
+                return;
+            }
+            try {
+                await interaction.reply({ content: '⚠️ Failed to acknowledge interaction. Please try again.', ephemeral: true });
+                acknowledged = true;
+            } catch {}
+        }
 
         const ticketId = interaction.customId.replace('buy_ticket_', '');
         const userId = interaction.user.id;
@@ -791,16 +875,23 @@ async function handleBuyTicketButton(interaction) {
         embed.setFooter({ text: `Purchase ID: ${result.purchase._id}` })
             .setTimestamp();
 
-        await interaction.editReply({
-            content: '✅ Purchase completed successfully!',
-            embeds: [embed]
-        });
+        if (acknowledged) {
+            await interaction.editReply({ content: '✅ Purchase completed successfully!', embeds: [embed] });
+        } else {
+            await interaction.channel?.send('✅ Purchase completed successfully!');
+        }
 
     } catch (error) {
         console.error('Error buying ticket via button:', error);
-        await interaction.editReply({
-            content: `❌ Error buying ticket: ${error.message}`
-        });
+        try {
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply({ content: `❌ Error buying ticket: ${error.message}` });
+            } else {
+                await interaction.reply({ content: `❌ Error buying ticket: ${error.message}`, ephemeral: true });
+            }
+        } catch {
+            await interaction.channel?.send(`❌ Error buying ticket: ${error.message}`);
+        }
     }
 }
 
