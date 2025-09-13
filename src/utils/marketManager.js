@@ -94,9 +94,9 @@ async function buyMarketItem(itemId, userId, username, guild) {
         const member = await guild.members.fetch(userId);
 
         // Enforce purchase rules
-        // 1) Users who don't have FastShoter can't buy Capo
-        if (item.roleId === CAPO_ROLE_ID && !member.roles.cache.has(FASTSHOTER_ROLE_ID)) {
-            return { success: false, error: 'You must have the FastShoter role to buy Capo.' };
+        // 1) Users who already have Capo cannot buy Capo or FastShoter
+        if (member.roles.cache.has(CAPO_ROLE_ID) && (item.roleId === CAPO_ROLE_ID || item.roleId === FASTSHOTER_ROLE_ID)) {
+            return { success: false, error: 'Users with Capo cannot buy Capo or FastShoter.' };
         }
 
         // 2) Users who don't have Capo can't buy WL from other projects
