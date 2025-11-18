@@ -59,6 +59,8 @@ const AWARD_SOURCES = ['games', 'memesAndArt', 'chatActivity', 'others'];
 // Purchase requirement roles
 const FASTSHOTER_ROLE_ID = '1353402683247165561';
 const CAPO_ROLE_ID = '1353402893532659732';
+const MAFIA_ROLE_ID = '1353403039200972830';
+const FREE_MINT_ROLE_ID = '1416902471124652204';
 
 /**
  * Determine user's gang with priority system (Mad Gang takes priority)
@@ -107,6 +109,8 @@ module.exports = {
     ADDITIONAL_CHAT_CHANNELS,
     FASTSHOTER_ROLE_ID,
     CAPO_ROLE_ID,
+    MAFIA_ROLE_ID,
+    FREE_MINT_ROLE_ID,
     COLLECTION3_NAME,
     COLLECTION3_ROLE_ID,
     COLLECTION3_CONTRACT_ADDRESS,

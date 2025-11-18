@@ -2,7 +2,7 @@ const { EmbedBuilder } = require('discord.js');
 const MarketItem = require('../models/MarketItem');
 const MarketPurchase = require('../models/MarketPurchase');
 const { removeCash } = require('./pointsManager');
-const { FASTSHOTER_ROLE_ID, CAPO_ROLE_ID } = require('./constants');
+const { FASTSHOTER_ROLE_ID, CAPO_ROLE_ID, MAFIA_ROLE_ID, FREE_MINT_ROLE_ID } = require('./constants');
 
 /**
  * Add a new item to the market
@@ -93,13 +93,22 @@ async function buyMarketItem(itemId, userId, username, guild) {
         // Fetch member for role checks
         const member = await guild.members.fetch(userId);
 
+        // Check if user has Mafia or Free Mint role
+        const hasMafiaRole = member.roles.cache.has(MAFIA_ROLE_ID);
+        const hasFreeMintRole = member.roles.cache.has(FREE_MINT_ROLE_ID);
+
         // Enforce purchase rules
         // 1) Users who already have Capo cannot buy Capo or FastShoter
         if (member.roles.cache.has(CAPO_ROLE_ID) && (item.roleId === CAPO_ROLE_ID || item.roleId === FASTSHOTER_ROLE_ID)) {
             return { success: false, error: 'Users with Capo cannot buy Capo or FastShoter.' };
         }
 
-        // 2) Users who don't have Capo can't buy WL from other projects
+        // 2) Users with Mafia or Free Mint roles cannot buy Capo or Fast Shooter
+        if ((hasMafiaRole || hasFreeMintRole) && (item.roleId === CAPO_ROLE_ID || item.roleId === FASTSHOTER_ROLE_ID)) {
+            return { success: false, error: 'Users with Mafia or Free Mint roles cannot buy Capo or Fast Shooter.' };
+        }
+
+        // 3) Users who don't have Capo can't buy WL from other projects
         if (item.externalWl && !member.roles.cache.has(CAPO_ROLE_ID)) {
             return { success: false, error: 'You must have the Capo role to buy external project WL.' };
         }
