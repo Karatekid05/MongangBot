@@ -133,13 +133,51 @@ async function buyMarketItem(itemId, userId, username, guild) {
             return { success: false, error: 'You already have this role.' };
         }
 
-        // Check if spots are available
+        // Check if spots are available (initial check)
         if (item.spots > 0 && item.soldSpots >= item.spots) {
             return { success: false, error: 'This item is sold out.' };
         }
 
-        // Remove cash from user
-        await removeCash(userId, item.price, 'market_purchase');
+        // Remove cash from user and verify the removal was successful
+        const cashRemovalResult = await removeCash(userId, item.price, 'market_purchase');
+        
+        if (!cashRemovalResult.success) {
+            return { success: false, error: `Failed to process payment: ${cashRemovalResult.message || 'Unknown error'}` };
+        }
+
+        // Verify that the full amount was removed (user had enough cash)
+        if (cashRemovalResult.amountRemoved < item.price) {
+            // Refund what was removed (should be 0 or less than price)
+            if (cashRemovalResult.amountRemoved > 0) {
+                const { awardCash } = require('./pointsManager');
+                await awardCash(userId, 'market_refund', cashRemovalResult.amountRemoved);
+            }
+            return { 
+                success: false, 
+                error: `Insufficient $CASH. You have less than ${item.price} $CASH available.` 
+            };
+        }
+
+        // Atomically increment soldSpots only if spots are still available
+        // This prevents race conditions where multiple users try to buy the last spot
+        if (item.spots > 0) {
+            const updatedItem = await MarketItem.findOneAndUpdate(
+                { 
+                    _id: item._id, 
+                    $expr: { $lt: ['$soldSpots', '$spots'] } // Only update if soldSpots < spots
+                },
+                { $inc: { soldSpots: 1 } },
+                { new: true }
+            );
+
+            // If update failed, it means all spots were sold (race condition)
+            if (!updatedItem) {
+                // Refund the cash since we can't complete the purchase
+                const { awardCash } = require('./pointsManager');
+                await awardCash(userId, 'market_refund', item.price);
+                return { success: false, error: 'This item is sold out. Your $CASH has been refunded.' };
+            }
+        }
 
         // Add role to user
         try {
@@ -147,6 +185,10 @@ async function buyMarketItem(itemId, userId, username, guild) {
         } catch (roleError) {
             console.error('Error adding role:', roleError);
             // Refund the cash if role assignment fails
+            // Also need to decrement soldSpots if it was incremented
+            if (item.spots > 0) {
+                await MarketItem.findByIdAndUpdate(item._id, { $inc: { soldSpots: -1 } });
+            }
             const { awardCash } = require('./pointsManager');
             await awardCash(userId, 'market_refund', item.price);
             return { success: false, error: 'Error assigning role. Your $CASH has been refunded.' };
@@ -165,20 +207,15 @@ async function buyMarketItem(itemId, userId, username, guild) {
 
         await purchase.save();
 
-        // Update sold spots count
-		if (item.spots > 0) {
-			await MarketItem.findByIdAndUpdate(item._id, { $inc: { soldSpots: 1 } });
-
-			// Update the marketplace message to reflect new spots left
-			try {
-				const marketMessage = await getMarketMessage();
-				if (marketMessage && marketMessage.channelId && marketMessage.messageId) {
-					await updateMarketMessage(marketMessage.channelId, marketMessage.messageId, guild.client);
-				}
-			} catch (updateError) {
-				console.error('Error updating marketplace message after purchase:', updateError);
-			}
-		}
+        // Update the marketplace message to reflect new spots left
+        try {
+            const marketMessage = await getMarketMessage();
+            if (marketMessage && marketMessage.channelId && marketMessage.messageId) {
+                await updateMarketMessage(marketMessage.channelId, marketMessage.messageId, guild.client);
+            }
+        } catch (updateError) {
+            console.error('Error updating marketplace message after purchase:', updateError);
+        }
 
         // Schedule role removal if temporary
         if (item.durationHours > 0) {
