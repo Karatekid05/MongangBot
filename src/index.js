@@ -658,7 +658,13 @@ async function handleBuyMarketButton(interaction) {
             if (acknowledged) {
                 await interaction.editReply({ content: `❌ ${result.error}` });
             } else {
-                await interaction.channel?.send(`❌ ${result.error}`);
+                // Try to reply ephemerally, fallback to channel if interaction expired
+                try {
+                    await interaction.reply({ content: `❌ ${result.error}`, ephemeral: true });
+                } catch {
+                    // If interaction expired, send to channel as last resort
+                    await interaction.channel?.send(`❌ ${result.error}`);
+                }
             }
         }
 
@@ -791,7 +797,13 @@ async function handleMarketSelectItem(interaction) {
             if (acknowledged) {
                 await interaction.editReply({ content: `❌ **Purchase failed:** ${result.error}` });
             } else {
-                await interaction.channel?.send(`❌ Purchase failed: ${result.error}`);
+                // Try to reply ephemerally, fallback to channel if interaction expired
+                try {
+                    await interaction.reply({ content: `❌ **Purchase failed:** ${result.error}`, ephemeral: true });
+                } catch {
+                    // If interaction expired, send to channel as last resort
+                    await interaction.channel?.send(`❌ Purchase failed: ${result.error}`);
+                }
             }
         }
 
